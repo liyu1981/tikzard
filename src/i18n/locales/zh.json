@@ -1,0 +1,25 @@
+{
+  "app": {
+    "title": "Prompt TikZ",
+    "tagline": "本地优先的 TikZ 提示词工作台"
+  },
+  "theme": {
+    "label": "主题",
+    "light": "浅色主题",
+    "dark": "深色主题",
+    "system": "跟随系统主题"
+  },
+  "demo": {
+    "editorLabel": "TikZ 源码",
+    "previewLabel": "预览",
+    "render": "渲染",
+    "resetExample": "恢复示例",
+    "hint": "全部编译都在浏览器本地完成——无需服务器，无需联网。",
+    "statusBooting": "正在加载 TeX 引擎…",
+    "statusReady": "就绪",
+    "statusRendering": "编译中…",
+    "statusDone": "已渲染",
+    "statusTimeout": "仍在编译或已失败，请检查源码",
+    "statusLoadError": "TeX 引擎加载失败"
+  }
+}

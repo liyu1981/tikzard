@@ -1,0 +1,25 @@
+{
+  "app": {
+    "title": "Prompt TikZ",
+    "tagline": "Local-first TikZ prompt workbench"
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light theme",
+    "dark": "Dark theme",
+    "system": "Follow system theme"
+  },
+  "demo": {
+    "editorLabel": "TikZ source",
+    "previewLabel": "Preview",
+    "render": "Render",
+    "resetExample": "Reset example",
+    "hint": "Everything compiles locally in your browser — no server, no network.",
+    "statusBooting": "Loading TeX engine…",
+    "statusReady": "Ready",
+    "statusRendering": "Compiling…",
+    "statusDone": "Rendered",
+    "statusTimeout": "Still compiling or failed — check the source",
+    "statusLoadError": "TeX engine failed to load"
+  }
+}
