@@ -19,6 +19,14 @@
   --glow-indigo: oklch(0.58 0.24 280 / 0.32);
   --glow-violet: oklch(0.6 0.27 305 / 0.34);
   --glow-pink: oklch(0.63 0.25 335 / 0.3);
+
+  /* Code editor tokens (highlight.js) */
+  --code-keyword: oklch(0.5 0.22 295);
+  --code-builtin: oklch(0.52 0.18 250);
+  --code-comment: oklch(0.48 0.02 270 / 0.7);
+  --code-meta: oklch(0.52 0.14 160);
+  --code-string: oklch(0.5 0.15 145);
+  --code-params: oklch(0.62 0.15 60);
 }
 
 .dark {
@@ -40,6 +48,14 @@
   --glow-indigo: oklch(0.58 0.24 280 / 0.38);
   --glow-violet: oklch(0.6 0.27 305 / 0.4);
   --glow-pink: oklch(0.63 0.25 335 / 0.38);
+
+  /* Code editor tokens (highlight.js) */
+  --code-keyword: oklch(0.78 0.17 300);
+  --code-builtin: oklch(0.8 0.12 230);
+  --code-comment: oklch(0.7 0.01 270 / 0.65);
+  --code-meta: oklch(0.82 0.11 165);
+  --code-string: oklch(0.8 0.12 145);
+  --code-params: oklch(0.83 0.13 80);
 }
 
 @theme inline {
@@ -64,6 +80,39 @@ body {
 :focus-visible {
   outline: 2px solid color-mix(in oklch, var(--ring) 80%, transparent);
   outline-offset: 2px;
+}
+
+/* highlight.js — TikZ/LaTeX theme built from app tokens so it follows
+   light/dark automatically; no stock hljs stylesheet is imported. */
+.hljs {
+  color: inherit;
+  background: transparent;
+}
+
+.hljs-keyword {
+  color: var(--code-keyword);
+  font-weight: 500;
+}
+
+.hljs-built_in {
+  color: var(--code-builtin);
+}
+
+.hljs-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.hljs-meta {
+  color: var(--code-meta);
+}
+
+.hljs-string {
+  color: var(--code-string);
+}
+
+.hljs-params {
+  color: var(--code-params);
 }
 
 /* Glass surfaces — single source of truth (glass-webui-design).
