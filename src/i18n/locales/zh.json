@@ -9,11 +9,10 @@
     "dark": "深色主题",
     "system": "跟随系统主题"
   },
-  "demo": {
+  "workbench": {
     "editorLabel": "指令",
     "previewLabel": "结果",
     "render": "渲染",
-    "resetExample": "恢复示例",
     "zoomIn": "放大",
     "zoomOut": "缩小",
     "zoomReset": "重置缩放",

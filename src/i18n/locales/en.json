@@ -9,11 +9,10 @@
     "dark": "Dark theme",
     "system": "Follow system theme"
   },
-  "demo": {
+  "workbench": {
     "editorLabel": "Instruction",
     "previewLabel": "Result",
     "render": "Render",
-    "resetExample": "Reset example",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "zoomReset": "Reset zoom",

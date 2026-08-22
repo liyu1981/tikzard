@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslation } from "react-i18next";
-import { TikzDemo } from "@/components/tikz-demo";
+import { TikzWorkbench } from "@/components/tikz-workbench";
 
 export default function Home() {
   const { t } = useTranslation();
@@ -14,7 +14,7 @@ export default function Home() {
         </h1>
         <p className="text-base text-muted-foreground">{t("app.tagline")}</p>
       </header>
-      <TikzDemo />
+      <TikzWorkbench />
     </main>
   );
 }

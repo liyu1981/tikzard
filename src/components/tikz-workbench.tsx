@@ -6,8 +6,11 @@ import { TikzEditor } from "@/components/tikz-editor";
 import { ensureTikzJax } from "@/lib/tikzjax";
 
 const EXAMPLE_CODE = String.raw`\begin{tikzpicture}
+  % draw x axis with arrow tip, labeled $x$
   \draw[->, thick] (-0.5,0) -- (4.5,0) node[right] {$x$};
+  % draw y axis with arrow tip, labeled $y$
   \draw[->, thick] (0,-0.5) -- (0,3) node[above] {$y$};
+  % draw the parabola y = x^2 / 4 for x in [0, 3]
   \draw[domain=0:3, smooth, thick, blue!70!black]
     plot ({\x}, {0.25*\x*\x});
 \end{tikzpicture}`;
@@ -21,12 +24,12 @@ type Status =
   | "loadError";
 
 const STATUS_KEY: Record<Status, string> = {
-  booting: "demo.statusBooting",
-  ready: "demo.statusReady",
-  rendering: "demo.statusRendering",
-  done: "demo.statusDone",
-  timeout: "demo.statusTimeout",
-  loadError: "demo.statusLoadError",
+  booting: "workbench.statusBooting",
+  ready: "workbench.statusReady",
+  rendering: "workbench.statusRendering",
+  done: "workbench.statusDone",
+  timeout: "workbench.statusTimeout",
+  loadError: "workbench.statusLoadError",
 };
 
 const STATUS_DOT: Record<Status, string> = {
@@ -42,7 +45,7 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-export function TikzDemo() {
+export function TikzWorkbench() {
   const { t } = useTranslation();
   const [code, setCode] = useState(EXAMPLE_CODE);
   const [status, setStatus] = useState<Status>("booting");
@@ -178,16 +181,16 @@ export function TikzDemo() {
     }
     const seconds = Math.max(0, Math.floor((nowTick - doneInfo.at) / 1000));
     if (seconds < 10) {
-      return t("demo.justNow");
+      return t("workbench.justNow");
     }
     if (seconds < 60) {
-      return t("demo.secondsAgo", { count: seconds });
+      return t("workbench.secondsAgo", { count: seconds });
     }
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) {
-      return t("demo.minutesAgo", { count: minutes });
+      return t("workbench.minutesAgo", { count: minutes });
     }
-    return t("demo.hoursAgo", { count: Math.floor(minutes / 60) });
+    return t("workbench.hoursAgo", { count: Math.floor(minutes / 60) });
   })();
 
   return (
@@ -195,7 +198,7 @@ export function TikzDemo() {
       <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center">
           <label htmlFor="tikz-source" className="text-sm font-medium">
-            {t("demo.editorLabel")}
+            {t("workbench.editorLabel")}
           </label>
         </div>
         <TikzEditor value={code} onChange={setCode} />
@@ -207,35 +210,24 @@ export function TikzDemo() {
               onClick={() => renderNow(code)}
               className="glass-control !border-border/60 rounded-lg bg-clip-padding px-4 py-1.5 text-sm font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {t("demo.render")}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setCode(EXAMPLE_CODE);
-                renderNow(EXAMPLE_CODE);
-              }}
-              className="glass-control !border-border/60 rounded-lg bg-clip-padding px-4 py-1.5 text-sm font-medium text-muted-foreground transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {t("demo.resetExample")}
+              {t("workbench.render")}
             </button>
           </div>
           <p className="hidden truncate text-xs text-muted-foreground sm:block">
-            {t("demo.hint")}
+            {t("workbench.hint")}
           </p>
         </div>
       </div>
       <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
           <p className="text-sm font-medium text-muted-foreground">
-            {t("demo.previewLabel")}
+            {t("workbench.previewLabel")}
           </p>
           <div className="flex items-center gap-0.5 rounded-full border border-neutral-200 bg-white/85 p-0.5 shadow-sm backdrop-blur-md">
             <button
               type="button"
-              aria-label={t("demo.zoomFit")}
-              title={t("demo.zoomFit")}
+              aria-label={t("workbench.zoomFit")}
+              title={t("workbench.zoomFit")}
               onClick={fitView}
               className="rounded-full p-1.5 text-neutral-600 transition duration-150 hover:bg-neutral-500/10 hover:text-neutral-900 active:scale-[0.95]"
             >
@@ -255,8 +247,8 @@ export function TikzDemo() {
             </button>
             <button
               type="button"
-              aria-label={t("demo.zoomOut")}
-              title={t("demo.zoomOut")}
+              aria-label={t("workbench.zoomOut")}
+              title={t("workbench.zoomOut")}
               onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
               className="rounded-full p-1.5 text-neutral-600 transition duration-150 hover:bg-neutral-500/10 hover:text-neutral-900 active:scale-[0.95]"
             >
@@ -275,8 +267,8 @@ export function TikzDemo() {
             </button>
             <button
               type="button"
-              aria-label={t("demo.zoomReset")}
-              title={t("demo.zoomReset")}
+              aria-label={t("workbench.zoomReset")}
+              title={t("workbench.zoomReset")}
               onClick={() => setZoom(1)}
               className="min-w-12 rounded-full px-2 py-1 text-center font-mono text-xs tabular-nums text-neutral-700 transition duration-150 hover:bg-neutral-500/10 hover:text-neutral-900 active:scale-[0.95]"
             >
@@ -284,8 +276,8 @@ export function TikzDemo() {
             </button>
             <button
               type="button"
-              aria-label={t("demo.zoomIn")}
-              title={t("demo.zoomIn")}
+              aria-label={t("workbench.zoomIn")}
+              title={t("workbench.zoomIn")}
               onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
               className="rounded-full p-1.5 text-neutral-600 transition duration-150 hover:bg-neutral-500/10 hover:text-neutral-900 active:scale-[0.95]"
             >
@@ -326,7 +318,7 @@ export function TikzDemo() {
           </span>
           {status === "done" && doneInfo && (
             <span className="truncate text-muted-foreground tabular-nums">
-              {t("demo.compileTime", {
+              {t("workbench.compileTime", {
                 time: formatDuration(doneInfo.ms),
               })}
               {" · "}
