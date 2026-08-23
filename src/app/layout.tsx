@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AmbientBackground } from "@/components/ambient-background";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { I18nProvider } from "@/i18n/provider";
@@ -28,7 +29,10 @@ export default function RootLayout({
         <ThemeProvider>
           <I18nProvider>
             <AmbientBackground />
-            <ThemeSwitcher />
+            <div className="fixed top-4 right-4 z-20 flex items-center gap-2">
+              <SettingsDialog />
+              <ThemeSwitcher />
+            </div>
             {children}
           </I18nProvider>
         </ThemeProvider>

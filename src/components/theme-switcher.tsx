@@ -3,6 +3,11 @@
 import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@/components/theme-provider";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Theme } from "@/lib/theme";
 
 function SunIcon() {
@@ -61,7 +66,11 @@ function MonitorIcon() {
   );
 }
 
-const OPTIONS: { value: Theme; labelKey: string; Icon: ComponentType }[] = [
+const CYCLE: {
+  value: Theme;
+  labelKey: string;
+  Icon: ComponentType;
+}[] = [
   { value: "light", labelKey: "theme.light", Icon: SunIcon },
   { value: "dark", labelKey: "theme.dark", Icon: MoonIcon },
   { value: "system", labelKey: "theme.system", Icon: MonitorIcon },
@@ -71,28 +80,25 @@ export function ThemeSwitcher() {
   const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
 
+  const current = CYCLE.find((entry) => entry.value === theme) ?? CYCLE[2];
+  const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
+  const CurrentIcon = current?.Icon ?? MonitorIcon;
+
   return (
-    <fieldset
-      aria-label={t("theme.label")}
-      className="glass-control fixed top-4 right-4 z-20 m-0 flex gap-1 rounded-full bg-clip-padding p-1"
-    >
-      {OPTIONS.map(({ value, labelKey, Icon }) => (
+    <Tooltip>
+      <TooltipTrigger asChild>
         <button
-          key={value}
           type="button"
-          title={t(labelKey)}
-          aria-label={t(labelKey)}
-          aria-pressed={theme === value}
-          onClick={() => setTheme(value)}
-          className={`rounded-full p-2 transition duration-150 hover:brightness-[1.06] active:scale-[0.95] ${
-            theme === value
-              ? "bg-white/15 text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
+          aria-label={t("theme.label")}
+          onClick={() => setTheme(next.value)}
+          className="glass-control flex size-9 items-center justify-center rounded-full bg-clip-padding p-2 text-muted-foreground transition duration-150 hover:text-foreground active:scale-[0.95]"
         >
-          <Icon />
+          <CurrentIcon />
         </button>
-      ))}
-    </fieldset>
+      </TooltipTrigger>
+      <TooltipContent>
+        {t(current.labelKey)} → {t(next.labelKey)}
+      </TooltipContent>
+    </Tooltip>
   );
 }

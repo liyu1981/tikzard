@@ -1,19 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AgentChat } from "@/components/agent/agent-chat";
 import { TikzEditor } from "@/components/tikz-editor";
+import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
 import { ensureTikzJax } from "@/lib/tikzjax";
-
-const EXAMPLE_CODE = String.raw`\begin{tikzpicture}
-  % draw x axis with arrow tip, labeled $x$
-  \draw[->, thick] (-0.5,0) -- (4.5,0) node[right] {$x$};
-  % draw y axis with arrow tip, labeled $y$
-  \draw[->, thick] (0,-0.5) -- (0,3) node[above] {$y$};
-  % draw the parabola y = x^2 / 4 for x in [0, 3]
-  \draw[domain=0:3, smooth, thick, blue!70!black]
-    plot ({\x}, {0.25*\x*\x});
-\end{tikzpicture}`;
+import { codeAtom, type LeftTab, leftTabAtom } from "@/lib/workbench-state";
 
 type Status =
   | "booting"
@@ -45,9 +39,14 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** Debounce for auto-recompile while the user (or the agent) types. */
+const AUTO_RENDER_DELAY_MS = 600;
+
 export function TikzWorkbench() {
   const { t } = useTranslation();
-  const [code, setCode] = useState(EXAMPLE_CODE);
+  const [code, setCode] = useAtom(codeAtom);
+  const leftTab = useAtomValue(leftTabAtom);
+  const setLeftTab = useSetAtom(leftTabAtom);
   const [status, setStatus] = useState<Status>("booting");
   const [zoom, setZoom] = useState(1);
   const [doneInfo, setDoneInfo] = useState<{ at: number; ms: number } | null>(
@@ -57,8 +56,22 @@ export function TikzWorkbench() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const autoRenderedRef = useRef(false);
-  const renderFnRef = useRef<() => void>(() => {});
   const renderStartRef = useRef(0);
+  const codeRef = useRef(code);
+  const statusRef = useRef(status);
+  const doneInfoMsRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    codeRef.current = code;
+  }, [code]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    doneInfoMsRef.current = doneInfo?.ms ?? null;
+  }, [doneInfo]);
 
   // Scale the drawing to fully fit the visible canvas (never upscales).
   const fitView = useCallback(() => {
@@ -100,6 +113,28 @@ export function TikzWorkbench() {
     host.appendChild(el);
   }, []);
 
+  // Bridge the live workbench state into the agent's tools: reads see the
+  // freshest source/status; writes land in the shared source atom and the
+  // auto-render effect below recompiles the preview.
+  const applyAgentCode = useCallback(
+    (next: string) => {
+      setCode(next);
+    },
+    [setCode],
+  );
+
+  const agentBridge = useMemo<EditorMutationBridge>(
+    () => ({
+      getCode: () => codeRef.current,
+      setCode: applyAgentCode,
+      getRenderStatus: () => ({
+        status: statusRef.current,
+        durationMs: doneInfoMsRef.current,
+      }),
+    }),
+    [applyAgentCode],
+  );
+
   useEffect(() => {
     let cancelled = false;
     ensureTikzJax()
@@ -118,17 +153,19 @@ export function TikzWorkbench() {
     };
   }, []);
 
+  // Recompile whenever the source changes — first render fires as soon as the
+  // engine is ready, later edits are debounced while typing.
   useEffect(() => {
-    renderFnRef.current = () => renderNow(code);
-  }, [code, renderNow]);
-
-  useEffect(() => {
-    if (status !== "ready" || autoRenderedRef.current) {
+    if (status !== "ready") {
       return;
     }
+    const delay = autoRenderedRef.current ? AUTO_RENDER_DELAY_MS : 0;
     autoRenderedRef.current = true;
-    renderFnRef.current();
-  }, [status]);
+    const timer = window.setTimeout(() => renderNow(code), delay);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [code, status, renderNow]);
 
   useEffect(() => {
     const host = stageRef.current;
@@ -193,43 +230,78 @@ export function TikzWorkbench() {
     return t("workbench.hoursAgo", { count: Math.floor(minutes / 60) });
   })();
 
+  const TABS: { id: LeftTab; labelKey: string }[] = [
+    { id: "assistant", labelKey: "agent.title" },
+    { id: "instruction", labelKey: "workbench.editorLabel" },
+  ];
+
+  const tabPill =
+    "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition duration-150";
+
   return (
     <div className="materialize grid h-[36rem] w-full grid-cols-1 gap-4 lg:h-[calc(100vh-11rem)] lg:grid-cols-2">
       <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
-        <div className="flex h-8 shrink-0 items-center">
-          <label htmlFor="tikz-source" className="text-sm font-medium">
-            {t("workbench.editorLabel")}
-          </label>
-        </div>
-        <TikzEditor value={code} onChange={setCode} />
-        <div className="flex h-9 shrink-0 items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => renderNow(code)}
-              className="glass-control !border-border/60 rounded-lg bg-clip-padding px-4 py-1.5 text-sm font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {t("workbench.render")}
-            </button>
+        <div className="flex h-8 shrink-0 items-center justify-between">
+          <div
+            role="tablist"
+            aria-label={t("workbench.tabsLabel")}
+            className="flex items-center gap-0.5 rounded-full border border-border/40 bg-background/50 p-0.5 shadow-sm backdrop-blur-md"
+          >
+            {TABS.map(({ id, labelKey }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={leftTab === id}
+                onClick={() => setLeftTab(id)}
+                className={`${tabPill} ${
+                  leftTab === id
+                    ? "bg-white/15 text-foreground shadow-sm dark:bg-white/15"
+                    : "text-muted-foreground hover:bg-neutral-500/10 hover:text-foreground"
+                }`}
+              >
+                {t(labelKey)}
+              </button>
+            ))}
           </div>
-          <p className="hidden truncate text-xs text-muted-foreground sm:block">
-            {t("workbench.hint")}
-          </p>
         </div>
+        {leftTab === "instruction" ? (
+          <>
+            <TikzEditor value={code} onChange={setCode} />
+            <div className="flex h-9 shrink-0 items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => renderNow(code)}
+                  className="glass-control !border-border/60 rounded-lg bg-clip-padding px-4 py-1.5 text-sm font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {t("workbench.render")}
+                </button>
+              </div>
+              <p className="hidden truncate text-xs text-muted-foreground sm:block">
+                {t("workbench.hint")}
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="min-h-0 flex-1">
+            <AgentChat bridge={agentBridge} className="h-full" />
+          </div>
+        )}
       </div>
       <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
           <p className="text-sm font-medium text-muted-foreground">
             {t("workbench.previewLabel")}
           </p>
-          <div className="flex items-center gap-0.5 rounded-full border border-neutral-200 bg-white/85 p-0.5 shadow-sm backdrop-blur-md">
+          <div className="flex items-center gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 shadow-sm backdrop-blur-md">
             <button
               type="button"
               aria-label={t("workbench.zoomFit")}
               title={t("workbench.zoomFit")}
               onClick={fitView}
-              className="rounded-full p-1.5 text-neutral-600 transition duration-150 hover:bg-neutral-500/10 hover:text-neutral-900 active:scale-[0.95]"
+              className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
             >
               <svg
                 width="14"
@@ -250,7 +322,7 @@ export function TikzWorkbench() {
               aria-label={t("workbench.zoomOut")}
               title={t("workbench.zoomOut")}
               onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
-              className="rounded-full p-1.5 text-neutral-600 transition duration-150 hover:bg-neutral-500/10 hover:text-neutral-900 active:scale-[0.95]"
+              className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
             >
               <svg
                 width="14"
@@ -270,7 +342,7 @@ export function TikzWorkbench() {
               aria-label={t("workbench.zoomReset")}
               title={t("workbench.zoomReset")}
               onClick={() => setZoom(1)}
-              className="min-w-12 rounded-full px-2 py-1 text-center font-mono text-xs tabular-nums text-neutral-700 transition duration-150 hover:bg-neutral-500/10 hover:text-neutral-900 active:scale-[0.95]"
+              className="min-w-12 rounded-full px-2 py-1 text-center font-mono text-xs tabular-nums text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
             >
               {Math.round(zoom * 100)}%
             </button>
@@ -279,7 +351,7 @@ export function TikzWorkbench() {
               aria-label={t("workbench.zoomIn")}
               title={t("workbench.zoomIn")}
               onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
-              className="rounded-full p-1.5 text-neutral-600 transition duration-150 hover:bg-neutral-500/10 hover:text-neutral-900 active:scale-[0.95]"
+              className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
             >
               <svg
                 width="14"
