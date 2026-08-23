@@ -1,11 +1,20 @@
 "use client";
 
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentChat } from "@/components/agent/agent-chat";
 import { CompileLogs } from "@/components/compile-logs";
 import { TikzEditor } from "@/components/tikz-editor";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
 import {
   beginCompileLog,
@@ -17,6 +26,14 @@ import {
   setRenderFailureListener,
 } from "@/lib/compile-logs";
 import { loadMostRecentDocument, saveDocument } from "@/lib/documents";
+import {
+  downloadBlob,
+  measureSvgNaturalSize,
+  renderSvgToCanvas,
+  svgToPngBlob,
+  toFileSlug,
+} from "@/lib/image-export";
+import { canvasToSinglePagePdfBlob } from "@/lib/pdf-export";
 import { ensureTikzJax } from "@/lib/tikzjax";
 import {
   codeAtom,
@@ -58,8 +75,93 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
+function ExportIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M12 15V3" />
+    </svg>
+  );
+}
+
+function CopyIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}
+
+function ImageFileIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+    </svg>
+  );
+}
+
+function PdfFileIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    </svg>
+  );
+}
+
 /** Debounce for auto-recompile while the user (or the agent) types. */
 const AUTO_RENDER_DELAY_MS = 600;
+
+/** Raster oversampling factor for PNG/PDF file exports (3× ≈ print quality). */
+const EXPORT_SCALE = 3;
 
 export function TikzWorkbench() {
   const { t } = useTranslation();
@@ -73,6 +175,7 @@ export function TikzWorkbench() {
   const [status, setStatus] = useState<Status>("booting");
   const [rightTab, setRightTab] = useState<RightTab>("preview");
   const [zoom, setZoom] = useState(1);
+  const [exporting, setExporting] = useState(false);
   const [doneInfo, setDoneInfo] = useState<{ at: number; ms: number } | null>(
     null,
   );
@@ -129,6 +232,86 @@ export function TikzWorkbench() {
     const scale = Math.min(availW / natW, availH / natH, 1);
     setZoom(Math.max(0.25, Math.round(scale * 100) / 100));
   }, [zoom]);
+
+  const getPreviewSvg = useCallback(
+    () => canvasRef.current?.querySelector("svg") ?? null,
+    [],
+  );
+
+  const runExport = useCallback(
+    async (action: (svg: SVGSVGElement) => Promise<string>) => {
+      if (exporting || statusRef.current !== "done") {
+        return;
+      }
+      const svg = getPreviewSvg();
+      if (!svg) {
+        return;
+      }
+      setExporting(true);
+      try {
+        pushCompileLog(
+          "info",
+          tRef.current("workbench.exportDone", { detail: await action(svg) }),
+        );
+      } catch {
+        pushCompileLog("error", tRef.current("workbench.exportFailed"));
+      } finally {
+        setExporting(false);
+      }
+    },
+    [exporting, getPreviewSvg],
+  );
+
+  const handleCopyImage = useCallback(
+    () =>
+      runExport(async (svg) => {
+        if (!navigator.clipboard?.write) {
+          throw new Error("clipboard unavailable");
+        }
+        const natural = measureSvgNaturalSize(svg, zoom);
+        const blob = await svgToPngBlob(svg, natural, zoom);
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": blob }),
+        ]);
+        return tRef.current("workbench.copyDetail", {
+          zoom: `${Math.round(zoom * 100)}%`,
+        });
+      }),
+    [runExport, zoom],
+  );
+
+  const handleExportPng = useCallback(
+    () =>
+      runExport(async (svg) => {
+        const natural = measureSvgNaturalSize(svg, zoom);
+        const blob = await svgToPngBlob(svg, natural, EXPORT_SCALE);
+        const filename = `${toFileSlug(docTitle)}.png`;
+        downloadBlob(blob, filename);
+        return filename;
+      }),
+    [docTitle, runExport, zoom],
+  );
+
+  const handleExportPdf = useCallback(
+    () =>
+      runExport(async (svg) => {
+        const natural = measureSvgNaturalSize(svg, zoom);
+        const canvas = await renderSvgToCanvas(
+          svg,
+          natural.width * EXPORT_SCALE,
+          natural.height * EXPORT_SCALE,
+        );
+        const blob = canvasToSinglePagePdfBlob(
+          canvas,
+          natural.width,
+          natural.height,
+        );
+        const filename = `${toFileSlug(docTitle)}.pdf`;
+        downloadBlob(blob, filename);
+        return filename;
+      }),
+    [docTitle, runExport, zoom],
+  );
 
   const renderNow = useCallback(
     (source: string) => {
@@ -461,77 +644,116 @@ export function TikzWorkbench() {
             ))}
           </div>
           {rightTab === "preview" && (
-            <div className="flex items-center gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 shadow-sm backdrop-blur-md">
-              <button
-                type="button"
-                aria-label={t("workbench.zoomFit")}
-                title={t("workbench.zoomFit")}
-                onClick={fitView}
-                className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
+            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 shadow-sm backdrop-blur-md">
+                <button
+                  type="button"
+                  aria-label={t("workbench.zoomFit")}
+                  title={t("workbench.zoomFit")}
+                  onClick={fitView}
+                  className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
                 >
-                  <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                aria-label={t("workbench.zoomOut")}
-                title={t("workbench.zoomOut")}
-                onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
-                className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  aria-hidden="true"
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("workbench.zoomOut")}
+                  title={t("workbench.zoomOut")}
+                  onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
+                  className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
                 >
-                  <path d="M5 12h14" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                aria-label={t("workbench.zoomReset")}
-                title={t("workbench.zoomReset")}
-                onClick={() => setZoom(1)}
-                className="min-w-12 rounded-full px-2 py-1 text-center font-mono text-xs tabular-nums text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
-              >
-                {Math.round(zoom * 100)}%
-              </button>
-              <button
-                type="button"
-                aria-label={t("workbench.zoomIn")}
-                title={t("workbench.zoomIn")}
-                onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
-                className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  aria-hidden="true"
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M5 12h14" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("workbench.zoomReset")}
+                  title={t("workbench.zoomReset")}
+                  onClick={() => setZoom(1)}
+                  className="min-w-12 rounded-full px-2 py-1 text-center font-mono text-xs tabular-nums text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
                 >
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </button>
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("workbench.zoomIn")}
+                  title={t("workbench.zoomIn")}
+                  onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
+                  className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label={t("workbench.export")}
+                  title={t("workbench.export")}
+                  disabled={status !== "done" || exporting}
+                  className="rounded-full border border-border/50 bg-background/70 p-1.5 text-muted-foreground shadow-sm backdrop-blur-md transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ExportIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[11rem]">
+                  <DropdownMenuItem
+                    onSelect={() => void handleCopyImage()}
+                    className="text-sm"
+                  >
+                    <CopyIcon />
+                    {t("workbench.copyImage")}
+                    <DropdownMenuShortcut className="tabular-nums">
+                      {Math.round(zoom * 100)}%
+                    </DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => void handleExportPng()}
+                    className="text-sm"
+                  >
+                    <ImageFileIcon />
+                    {t("workbench.exportPng")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => void handleExportPdf()}
+                    className="text-sm"
+                  >
+                    <PdfFileIcon />
+                    {t("workbench.exportPdf")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
         </div>
