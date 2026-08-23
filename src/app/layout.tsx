@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { AmbientBackground } from "@/components/ambient-background";
-import { SettingsDialog } from "@/components/settings-dialog";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import { I18nProvider } from "@/i18n/provider";
 import "./globals.css";
 
@@ -22,17 +21,17 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="stylesheet" href="/tikzjax/fonts.min.css" />
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: theme bootstrap must run before first paint */}
-        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: theme bootstrap must run before first paint
+          dangerouslySetInnerHTML={{ __html: themeInit }}
+        />
       </head>
       <body className="ambient-bg antialiased">
         <ThemeProvider>
           <I18nProvider>
             <AmbientBackground />
-            <div className="fixed top-4 right-4 z-20 flex items-center gap-2">
-              <SettingsDialog />
-              <ThemeSwitcher />
-            </div>
             {children}
           </I18nProvider>
         </ThemeProvider>

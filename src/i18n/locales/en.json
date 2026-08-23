@@ -1,8 +1,4 @@
 {
-  "app": {
-    "title": "Prompt TikZ",
-    "tagline": "Local-first TikZ prompt workbench"
-  },
   "theme": {
     "label": "Theme",
     "light": "Light theme",
@@ -20,6 +16,14 @@
     "aboutLocal": "No server, no account — your drawings and chat sessions live only on this device.",
     "aboutAgent": "The AI assistant is bring-your-own-key: credentials stay in this browser and connect straight to the providers you choose.",
     "version": "Version"
+  },
+  "documents": {
+    "open": "Open document",
+    "empty": "No saved documents yet.",
+    "editedAgo": "Edited {{time}} ago",
+    "delete": "Delete document",
+    "untitled": "Untitled",
+    "titleField": "Document title"
   },
   "workbench": {
     "editorLabel": "TikZ Source",
@@ -66,6 +70,8 @@
     "chatPlaceholder": "Ask the assistant… (Enter to send, Shift+Enter for newline)",
     "selectModelPlaceholder": "Select model",
     "modelField": "Model",
+    "searchModelPlaceholder": "Search models…",
+    "useCustomModel": "Use custom model: {{model}}",
     "thinkingLevelField": "Thinking level",
     "level": {
       "off": "Off",
@@ -77,7 +83,7 @@
     "toolArgs": "Args",
     "toolResult": "Result",
     "toolError": "Error",
-    "systemPrompt": "You are the assistant embedded in Prompt TikZ, a local-first TikZ workbench. The user writes TikZ/LaTeX source in the editor on the left and sees the rendered drawing on the right. Answer in {{language}}. You can read the current source and render status, and — with the user's confirmation — replace the editor's source. Help the user draw figures, debug LaTeX errors, and improve their TikZ code.",
+    "systemPrompt": "You are the AI assistant embedded in Prompt TikZ, a local-first TikZ workbench, and you are an expert TikZ author — a pro at drawing mathematics and science figures (function plots, geometry, physics and chemistry diagrams) with clean, precise TikZ code.\n\nThe user writes TikZ/LaTeX source in the editor on the left and sees the rendered drawing on the right. You can read the current source (get_tikz_source), check the compile status (get_render_status), and replace the editor source with set_tikz_source whenever the drawing needs to change. Always send the complete updated tikzpicture, never a fragment. Answer in {{language}}.\n\nA basic complete document looks like this:\n\n\\begin{tikzpicture}  % draw x axis with arrow tip, labeled $x$\n  \\draw[->, thick] (-0.5,0) -- (4.5,0) node[right] {$x$};\n  % draw y axis with arrow tip, labeled $y$\n  \\draw[->, thick] (0,-0.5) -- (0,3) node[above] {$y$};\n  % draw the parabola y = x^2 / 4 for x in [0, 3]\n  \\draw[domain=0:3, smooth, thick, blue!70!black]\n    plot ({\\x}, {0.25*\\x*\\x});\n\\end{tikzpicture}\n\nWhen the user asks for a new figure or any change to the drawing, do not paste TikZ code into the chat — call set_tikz_source with the complete updated tikzpicture so it renders immediately. Only show source code inline when the user explicitly asks to see it; a one-sentence summary of what you changed is enough. Every set_tikz_source call returns the compile result; if compilation failed, read the compiler output in the error, fix the source, and call set_tikz_source again until the figure renders.\n\nComment generously: put a short comment immediately above every drawing instruction saying what it draws, as shown above — and keep or improve any comments already present in the user's code.",
     "apiKeyPlaceholder": "API key",
     "save": "Save",
     "saveKey": "Save key",
@@ -99,9 +105,7 @@
     "refreshModels": "Model catalog",
     "refresh": "Refresh",
     "modelsRefreshed": "Model catalog refreshed.",
-    "confirmSetTitle": "Replace TikZ source?",
-    "confirmHint": "The AI wants to replace all TikZ source in the workbench editor. Changes appear immediately in the editor and preview but only live within this page. New source:",
-    "confirmReject": "Reject",
-    "confirmApprove": "Apply"
+    "autoFixMessage": "The TikZ preview failed to compile. Compiler output:\n{{logs}}\n\nPlease fix the source and call set_tikz_source with the complete corrected tikzpicture.",
+    "autoFixLimitReached": "Auto-fix paused after {{count}} consecutive failed compiles — review the source yourself, or send a message to continue."
   }
 }

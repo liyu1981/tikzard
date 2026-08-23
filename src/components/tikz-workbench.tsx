@@ -9,12 +9,22 @@ import { TikzEditor } from "@/components/tikz-editor";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
 import {
   beginCompileLog,
+  COMPILE_FAILURE_PATTERN,
+  getCompileLogsSince,
+  getLastCompileLogId,
   installTikzConsoleCapture,
   pushCompileLog,
   setRenderFailureListener,
 } from "@/lib/compile-logs";
+import { loadMostRecentDocument, saveDocument } from "@/lib/documents";
 import { ensureTikzJax } from "@/lib/tikzjax";
-import { codeAtom, type LeftTab, leftTabAtom } from "@/lib/workbench-state";
+import {
+  codeAtom,
+  currentDocIdAtom,
+  docTitleAtom,
+  type LeftTab,
+  leftTabAtom,
+} from "@/lib/workbench-state";
 
 type Status =
   | "booting"
@@ -54,6 +64,10 @@ const AUTO_RENDER_DELAY_MS = 600;
 export function TikzWorkbench() {
   const { t } = useTranslation();
   const [code, setCode] = useAtom(codeAtom);
+  const docTitle = useAtomValue(docTitleAtom);
+  const currentDocId = useAtomValue(currentDocIdAtom);
+  const setCurrentDocId = useSetAtom(currentDocIdAtom);
+  const setDocTitle = useSetAtom(docTitleAtom);
   const leftTab = useAtomValue(leftTabAtom);
   const setLeftTab = useSetAtom(leftTabAtom);
   const [status, setStatus] = useState<Status>("booting");
@@ -66,7 +80,10 @@ export function TikzWorkbench() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const lastRenderedCodeRef = useRef<string | null>(null);
+  const renderSeqRef = useRef(0);
   const renderStartRef = useRef(0);
+  const hydratedRef = useRef(false);
+  const docIdRef = useRef<string | null>(null);
   const codeRef = useRef(code);
   const statusRef = useRef(status);
   const doneInfoMsRef = useRef<number | null>(null);
@@ -122,6 +139,7 @@ export function TikzWorkbench() {
       host.replaceChildren();
       renderStartRef.current = performance.now();
       lastRenderedCodeRef.current = source;
+      renderSeqRef.current += 1;
       setDoneInfo(null);
       setStatus("rendering");
       beginCompileLog(t("workbench.logStart"));
@@ -143,17 +161,53 @@ export function TikzWorkbench() {
     [setCode],
   );
 
-  const agentBridge = useMemo<EditorMutationBridge>(
-    () => ({
+  const agentBridge = useMemo<EditorMutationBridge>(() => {
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+    return {
       getCode: () => codeRef.current,
       setCode: applyAgentCode,
       getRenderStatus: () => ({
         status: statusRef.current,
         durationMs: doneInfoMsRef.current,
       }),
-    }),
-    [applyAgentCode],
-  );
+      waitForRender: async (timeoutMs = 50000) => {
+        const deadline = performance.now() + timeoutMs;
+        const startSeq = renderSeqRef.current;
+        const sinceLogId = getLastCompileLogId();
+        const failedSince = () =>
+          getCompileLogsSince(sinceLogId).some((entry) =>
+            COMPILE_FAILURE_PATTERN.test(entry.text),
+          );
+        while (
+          renderSeqRef.current === startSeq &&
+          performance.now() < deadline
+        ) {
+          await sleep(100);
+        }
+        let failed = false;
+        while (performance.now() < deadline) {
+          // Log content is the authoritative failure signal — a failed
+          // compile never produces an <svg> for the observer to see.
+          failed = failedSince();
+          if (failed) {
+            break;
+          }
+          if (
+            statusRef.current === "done" ||
+            statusRef.current === "loadError"
+          ) {
+            break;
+          }
+          await sleep(100);
+        }
+        return {
+          status: failed || failedSince() ? "timeout" : statusRef.current,
+          durationMs: failed ? null : doneInfoMsRef.current,
+        };
+      },
+    };
+  }, [applyAgentCode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +228,44 @@ export function TikzWorkbench() {
       cancelled = true;
     };
   }, []);
+
+  // Hydrate the workbench with the most recently edited document from
+  // IndexedDB, or start a fresh (unsaved) document id when none exists.
+  useEffect(() => {
+    let cancelled = false;
+    void loadMostRecentDocument().then((doc) => {
+      if (cancelled) {
+        return;
+      }
+      if (doc !== undefined) {
+        docIdRef.current = doc.id;
+        setCode(doc.code);
+        setDocTitle(doc.title);
+        setCurrentDocId(doc.id);
+      }
+      hydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [setCode, setCurrentDocId, setDocTitle]);
+
+  // Debounced autosave of the current document (code + title) to IndexedDB.
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      let id = currentDocId ?? docIdRef.current;
+      if (id === null) {
+        id = crypto.randomUUID();
+        docIdRef.current = id;
+        setCurrentDocId(id);
+      }
+      void saveDocument({ id, title: docTitle, code, updatedAt: Date.now() });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [code, currentDocId, docTitle, setCurrentDocId]);
 
   // Recompile whenever the source differs from the last compile attempt —
   // the first render fires right after the engine boots, later edits are
@@ -293,8 +385,8 @@ export function TikzWorkbench() {
     "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition duration-150";
 
   return (
-    <div className="materialize grid h-[36rem] w-full grid-cols-1 gap-4 lg:h-[calc(100vh-11rem)] lg:grid-cols-2">
-      <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
+    <div className="materialize grid h-full min-h-0 w-full grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+      <div className="glass-control flex min-h-0 min-h-[calc(100dvh-7rem)] flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
           <div
             role="tablist"
@@ -344,7 +436,7 @@ export function TikzWorkbench() {
           </div>
         )}
       </div>
-      <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
+      <div className="glass-control flex min-h-0 min-h-[calc(100dvh-7rem)] flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
           <div
             role="tablist"

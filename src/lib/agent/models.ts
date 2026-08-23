@@ -14,8 +14,11 @@ import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import { groqProvider } from "@earendil-works/pi-ai/providers/groq";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
+import { OPENROUTER_MODELS } from "@earendil-works/pi-ai/providers/openrouter.models";
 
 export const LOCAL_PROVIDER_ID = "local-openai";
+
+const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 const DEFAULT_LOCAL_BASE_URL = "http://localhost:11434";
 
@@ -243,12 +246,92 @@ function buildLocalProvider(baseUrl: string) {
   });
 }
 
+interface OpenRouterModelDto {
+  id: string;
+  name?: string;
+  context_length?: number;
+  architecture?: { input_modalities?: string[] };
+  top_provider?: {
+    context_length?: number | null;
+    max_completion_tokens?: number | null;
+  };
+  pricing?: { prompt?: string; completion?: string; cache_read?: string };
+  supported_parameters?: string[];
+}
+
+/**
+ * The pi-ai built-in OpenRouter provider ships a static catalog that goes
+ * stale (its first entry, ai21/jamba-large-1.7, no longer has endpoints, so
+ * "test connection" 404s). Rebuild it with an empty baseline and a
+ * fetchModels that pulls the live /models list; the static catalog is kept
+ * only as an offline fallback. Auth config is reused from the original.
+ */
+function buildOpenRouterProvider() {
+  const base = openrouterProvider();
+  return createProvider({
+    id: base.id,
+    name: base.name,
+    baseUrl: base.baseUrl,
+    auth: base.auth,
+    models: [],
+    api: openAICompletionsApi(),
+    fetchModels: async ({ signal }) => {
+      const fallback = (): Model<"openai-completions">[] =>
+        Object.values(OPENROUTER_MODELS).map((model) => ({
+          ...model,
+          baseUrl: OPENROUTER_BASE_URL,
+        }));
+      try {
+        const response = await fetch(`${OPENROUTER_BASE_URL}/models`, {
+          signal,
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = (await response.json()) as {
+          data?: OpenRouterModelDto[];
+        };
+        const mapped = (data.data ?? [])
+          .filter(
+            (dto) =>
+              dto.architecture?.input_modalities === undefined ||
+              dto.architecture.input_modalities.includes("text"),
+          )
+          .map<Model<"openai-completions">>((dto) => ({
+            id: dto.id,
+            name: dto.name ?? dto.id,
+            api: "openai-completions",
+            provider: "openrouter",
+            baseUrl: OPENROUTER_BASE_URL,
+            reasoning: dto.supported_parameters?.includes("reasoning") ?? false,
+            input: dto.architecture?.input_modalities?.includes("image")
+              ? ["text", "image"]
+              : ["text"],
+            cost: {
+              input: Number.parseFloat(dto.pricing?.prompt ?? "0") || 0,
+              output: Number.parseFloat(dto.pricing?.completion ?? "0") || 0,
+              cacheRead: Number.parseFloat(dto.pricing?.cache_read ?? "0") || 0,
+              cacheWrite: 0,
+            },
+            contextWindow:
+              dto.top_provider?.context_length ?? dto.context_length ?? 128000,
+            maxTokens: dto.top_provider?.max_completion_tokens ?? 8192,
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        return mapped.length > 0 ? mapped : fallback();
+      } catch {
+        return fallback();
+      }
+    },
+  });
+}
+
 function buildModels(): MutableModels {
   const models = createModels({ credentials: credentialStore });
   models.setProvider(buildLocalProvider(getLocalBaseUrl()));
   models.setProvider(openaiProvider());
   models.setProvider(anthropicProvider());
-  models.setProvider(openrouterProvider());
+  models.setProvider(buildOpenRouterProvider());
   models.setProvider(deepseekProvider());
   models.setProvider(groqProvider());
   return models;
@@ -270,6 +353,39 @@ export function rebuildModels(): MutableModels {
 
 export function getModel(providerId: string, modelId: string) {
   return getModels().getModel(providerId, modelId);
+}
+
+/**
+ * Like getModel, but also resolves a custom model id that isn't in any
+ * catalog — it clones a same-provider sibling for the correct api/baseUrl, or
+ * synthesizes a minimal openai-completions model so user-typed slugs (e.g. an
+ * OpenRouter model not returned by /models) still drive the agent instance.
+ */
+export function resolveModel(providerId: string, modelId: string) {
+  const existing = getModel(providerId, modelId);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const sibling = getModels().getModels(providerId)[0];
+  if (sibling !== undefined) {
+    return { ...sibling, id: modelId, name: modelId };
+  }
+  const baseUrl = getModels().getProvider(providerId)?.baseUrl;
+  if (baseUrl === undefined) {
+    return undefined;
+  }
+  return {
+    id: modelId,
+    name: modelId,
+    api: "openai-completions",
+    provider: providerId,
+    baseUrl,
+    reasoning: false,
+    input: ["text"] as "text"[],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 8192,
+  } as Model<"openai-completions">;
 }
 
 export function listModels(): Array<{
@@ -353,6 +469,30 @@ export async function testConnection(providerId: string): Promise<string> {
     const count = data?.data?.length ?? 0;
     markVerified(providerId);
     return count > 0 ? `${count} model${count === 1 ? "" : "s"}` : "reachable";
+  }
+  if (providerId === "openrouter") {
+    // Validate the key against /key instead of a completion: the static
+    // catalog can reference retired models, but the key check is what
+    // actually proves the connection.
+    const credential = await credentialStore.read("openrouter");
+    const key = credential?.type === "api_key" ? credential.key : undefined;
+    if (key === undefined || key.trim() === "") {
+      throw new Error("not_configured");
+    }
+    const response = await fetch(`${OPENROUTER_BASE_URL}/key`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = (await response.json().catch(() => undefined)) as {
+      data?: { label?: string };
+    };
+    markVerified(providerId);
+    void refreshModels().catch(() => undefined);
+    const label = data.data?.label;
+    return label !== undefined ? `key ${label}` : "key valid";
   }
   const model = models.getModels(providerId)[0];
   if (model === undefined) {

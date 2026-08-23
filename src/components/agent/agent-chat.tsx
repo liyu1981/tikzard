@@ -5,6 +5,7 @@ import type {
   AgentMessage,
   ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
+import { useAtomValue } from "jotai";
 import type { KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,13 +17,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { buildAgent } from "@/lib/agent/agent";
-import { type ConfirmRequest, setConfirmHandler } from "@/lib/agent/confirm";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
 import {
-  getModel,
   LOCAL_PROVIDER_ID,
   listAvailableModels,
   refreshModels,
+  resolveModel,
 } from "@/lib/agent/models";
 import {
   type AgentSession,
@@ -31,7 +31,13 @@ import {
   saveSession,
 } from "@/lib/agent/store";
 import { buildAgentTools } from "@/lib/agent/tools";
-import { ConfirmDialog } from "./confirm-dialog";
+import {
+  COMPILE_FAILURE_PATTERN,
+  type CompileLogEntry,
+  compileLogsAtom,
+  getLastCompileLogId,
+} from "@/lib/compile-logs";
+import { leftTabAtom } from "@/lib/workbench-state";
 import {
   BotIcon,
   CheckIcon,
@@ -50,6 +56,10 @@ import { MarkdownView } from "./markdown";
 const LAST_MODEL_KEY = "agent.lastModel";
 const MAX_PROMPT_SOURCE_CHARS = 6000;
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "low", "medium", "high"];
+/** Consecutive auto-fix retries before pausing and handing control back. */
+const AUTO_FIX_MAX_ATTEMPTS = 3;
+/** Failure log text is embedded in the auto message, truncated to this. */
+const AUTO_FIX_LOG_CHARS = 4000;
 
 interface ToolChip {
   id: string;
@@ -120,6 +130,8 @@ function formatTime(timestamp: number): string {
 
 export function AgentChat({ bridge, className }: AgentChatProps) {
   const { t, i18n } = useTranslation();
+  const leftTab = useAtomValue(leftTabAtom);
+  const compileLogs = useAtomValue(compileLogsAtom);
 
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -130,9 +142,6 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(
     new Set(),
   );
-  const [pendingConfirm, setPendingConfirm] = useState<ConfirmRequest | null>(
-    null,
-  );
   const [input, setInput] = useState("");
   const [runError, setRunError] = useState<string | null>(null);
 
@@ -141,6 +150,14 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
   const bridgeRef = useRef(bridge ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  const lastSeenLogIdRef = useRef(getLastCompileLogId());
+  const autoFixChainRef = useRef(0);
+  const pendingFailureRef = useRef<CompileLogEntry | null>(null);
+  const streamingRef = useRef(false);
+
+  useEffect(() => {
+    streamingRef.current = streaming;
+  }, [streaming]);
 
   useEffect(() => {
     bridgeRef.current = bridge ?? null;
@@ -216,6 +233,51 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       ? { providerId: localFirst.provider, modelId: localFirst.model.id }
       : undefined;
   }, []);
+
+  /**
+   * Auto-fix loop: when a compile failure lands in the log stream while the
+   * assistant tab is open, feed the compiler output back to the agent as a
+   * user message so it rethinks and resubmits the source itself. Capped at
+   * AUTO_FIX_MAX_ATTEMPTS consecutive retries; a successful compile or a
+   * manual user message resets the counter.
+   */
+  const sendAutoFix = useCallback(
+    async (entry: CompileLogEntry) => {
+      if (streamingRef.current) {
+        pendingFailureRef.current = entry;
+        return;
+      }
+      const instance = agentRef.current;
+      const sessionNow = latestRef.current;
+      if (instance === null || sessionNow === null) {
+        return;
+      }
+      autoFixChainRef.current += 1;
+      if (autoFixChainRef.current > AUTO_FIX_MAX_ATTEMPTS) {
+        setRunError(
+          t("agent.autoFixLimitReached", { count: AUTO_FIX_MAX_ATTEMPTS }),
+        );
+        autoFixChainRef.current = 0;
+        return;
+      }
+      const message = t("agent.autoFixMessage", {
+        logs: entry.text.slice(0, AUTO_FIX_LOG_CHARS),
+      });
+      latestRef.current = sessionNow;
+      instance.state.systemPrompt = buildSystemPrompt(sessionNow.systemPrompt);
+      setStreaming(true);
+      setRunError(null);
+      try {
+        await instance.prompt(message);
+        await persistSession(sessionNow, instance.state.messages);
+      } catch (err) {
+        setRunError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setStreaming(false);
+      }
+    },
+    [buildSystemPrompt, persistSession, t],
+  );
 
   const subscribeAgent = useCallback(
     (instance: Agent, sessionNow: AgentSession) => {
@@ -297,13 +359,18 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
             );
             setToolChips([]);
             setExpandedToolCalls(new Set());
+            if (pendingFailureRef.current !== null) {
+              const pending = pendingFailureRef.current;
+              pendingFailureRef.current = null;
+              window.setTimeout(() => void sendAutoFix(pending), 300);
+            }
             break;
           default:
             break;
         }
       });
     },
-    [persistSession, syncTranscript, toolLabels],
+    [persistSession, sendAutoFix, syncTranscript, toolLabels],
   );
 
   const buildForSession = useCallback(
@@ -375,7 +442,6 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       return;
     }
     initialized.current = true;
-    setConfirmHandler((request) => setPendingConfirm(request));
     void (async () => {
       await refreshModels().catch(() => undefined);
       const all = await listSessionsFull();
@@ -393,7 +459,6 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       }
     })();
     return () => {
-      setConfirmHandler(null);
       agentRef.current?.abort();
       agentRef.current = null;
     };
@@ -406,6 +471,32 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       el.scrollTop = el.scrollHeight;
     }
   }, [sessions, streamingText, toolChips]);
+
+  // React to compile failures arriving in the shared log stream: only while
+  // the assistant tab is open, and each failure entry is handled once.
+  useEffect(() => {
+    const fresh = compileLogs.filter(
+      (entry) => entry.id > lastSeenLogIdRef.current,
+    );
+    const newest = compileLogs[compileLogs.length - 1];
+    lastSeenLogIdRef.current = newest ? newest.id : lastSeenLogIdRef.current;
+    if (fresh.length === 0) {
+      return;
+    }
+    if (fresh.some((entry) => /Compiled in /.test(entry.text))) {
+      autoFixChainRef.current = 0;
+    }
+    if (leftTab !== "assistant") {
+      return;
+    }
+    const failure = fresh.find((entry) =>
+      COMPILE_FAILURE_PATTERN.test(entry.text),
+    );
+    if (failure === undefined) {
+      return;
+    }
+    void sendAutoFix(failure);
+  }, [compileLogs, leftTab, sendAutoFix]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -426,6 +517,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     }
     latestRef.current = sessionNow;
     instance.state.systemPrompt = buildSystemPrompt(sessionNow.systemPrompt);
+    autoFixChainRef.current = 0;
     setInput("");
     setStreaming(true);
     setRunError(null);
@@ -493,7 +585,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       );
       const instance = agentRef.current;
       if (instance !== null && latestRef.current !== null) {
-        const model = getModel(providerId, modelId);
+        const model = resolveModel(providerId, modelId);
         if (model !== undefined) {
           instance.state.model = model;
         }
@@ -530,6 +622,19 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     selectedModel !== undefined
       ? `${selectedModel.model.name} · ${selectedModel.providerName}`
       : undefined;
+  const [modelQuery, setModelQuery] = useState("");
+  const normalizedQuery = modelQuery.trim().toLowerCase();
+  const filteredModels =
+    normalizedQuery === ""
+      ? allModels
+      : allModels.filter((m) =>
+          `${m.model.id} ${m.model.name} ${m.providerName}`
+            .toLowerCase()
+            .includes(normalizedQuery),
+        );
+  const exactMatch =
+    normalizedQuery !== "" &&
+    allModels.some((m) => m.model.id.toLowerCase() === normalizedQuery);
 
   const toggleToolCall = useCallback((id: string) => {
     setExpandedToolCalls((prev) => {
@@ -838,7 +943,13 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
             >
               {t("agent.modelField")}
             </label>
-            <DropdownMenu>
+            <DropdownMenu
+              onOpenChange={(open) => {
+                if (!open) {
+                  setModelQuery("");
+                }
+              }}
+            >
               <DropdownMenuTrigger
                 id="agent-model-select"
                 disabled={allModels.length === 0}
@@ -850,25 +961,50 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
                 </span>
                 <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="max-h-72 w-(--radix-dropdown-menu-trigger-width) overflow-y-auto text-xs">
-                <DropdownMenuRadioGroup
-                  value={latestModelValue ?? ""}
-                  onValueChange={(value) => {
-                    const [providerId, modelId] = value.split("::", 2);
-                    if (providerId !== undefined && modelId !== undefined) {
-                      changeModel(providerId, modelId);
-                    }
-                  }}
-                >
-                  {allModels.map((m) => (
-                    <DropdownMenuRadioItem
-                      key={`${m.provider}::${m.model.id}`}
-                      value={`${m.provider}::${m.model.id}`}
+              <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width) text-xs">
+                <div className="p-1">
+                  <input
+                    value={modelQuery}
+                    onChange={(event) => setModelQuery(event.target.value)}
+                    placeholder={t("agent.searchModelPlaceholder")}
+                    aria-label={t("agent.searchModelPlaceholder")}
+                    className="h-7 w-full rounded-md border border-border/50 bg-background/60 px-2 text-xs outline-none focus-visible:border-ring"
+                  />
+                </div>
+                <div className="max-h-56 overflow-y-auto">
+                  <DropdownMenuRadioGroup
+                    value={latestModelValue ?? ""}
+                    onValueChange={(value) => {
+                      const [providerId, modelId] = value.split("::", 2);
+                      if (providerId !== undefined && modelId !== undefined) {
+                        changeModel(providerId, modelId);
+                        setModelQuery("");
+                      }
+                    }}
+                  >
+                    {filteredModels.map((m) => (
+                      <DropdownMenuRadioItem
+                        key={`${m.provider}::${m.model.id}`}
+                        value={`${m.provider}::${m.model.id}`}
+                      >
+                        {m.model.name} · {m.providerName}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  {normalizedQuery !== "" && !exactMatch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const providerId = latest?.providerId ?? "openrouter";
+                        changeModel(providerId, modelQuery.trim());
+                        setModelQuery("");
+                      }}
+                      className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-xs outline-none transition-colors hover:bg-foreground/[0.06]"
                     >
-                      {m.model.name} · {m.providerName}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
+                      {t("agent.useCustomModel", { model: modelQuery.trim() })}
+                    </button>
+                  )}
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -953,16 +1089,6 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
           )}
         </form>
       </footer>
-
-      {pendingConfirm !== null && (
-        <ConfirmDialog
-          request={pendingConfirm}
-          onResolve={(ok) => {
-            pendingConfirm.resolve(ok);
-            setPendingConfirm(null);
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -21,4 +21,8 @@ export type LeftTab = "instruction" | "assistant";
  */
 export const codeAtom = atom(EXAMPLE_CODE);
 
+export const docTitleAtom = atom("Untitled");
+
+export const currentDocIdAtom = atom<string | null>(null);
+
 export const leftTabAtom = atom<LeftTab>("assistant");

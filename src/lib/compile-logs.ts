@@ -52,6 +52,32 @@ export function beginCompileLog(startMessage: string): void {
   pushCompileLog("info", startMessage);
 }
 
+/** Latest log lines as plain text, oldest first — for tool error reports. */
+export function getRecentCompileLogs(max: number): string {
+  const logs = getDefaultStore().get(compileLogsAtom).slice(-max);
+  return logs.map((entry) => `[${entry.level}] ${entry.text}`).join("\n");
+}
+
+/** Marker for "logs so far" — pair with getCompileLogsSince(). */
+export function getLastCompileLogId(): number {
+  return nextId - 1;
+}
+
+export function getCompileLogsSince(id: number): CompileLogEntry[] {
+  return getDefaultStore()
+    .get(compileLogsAtom)
+    .filter((entry) => entry.id > id);
+}
+
+/**
+ * Console phrases emitted by the runtime when a compile will NOT produce a
+ * drawing. Log content is the reliable failure signal: the broken-source
+ * placeholder is an <img>, so neither the SVG observer nor the status flag
+ * alone can be trusted.
+ */
+export const COMPILE_FAILURE_PATTERN =
+  /TikZJax (rendering failed|unable to prepare TikZ source|worker \d+ initialization failed)/;
+
 type RenderFailureListener = (message: string) => void;
 
 let renderFailureListener: RenderFailureListener | null = null;
@@ -67,9 +93,6 @@ export function setRenderFailureListener(
 ): void {
   renderFailureListener = listener;
 }
-
-const RENDER_FAILURE_PATTERN =
-  /TikZJax (rendering failed|worker \d+ initialization failed)/;
 
 type PatchedLevel = "log" | "warn" | "error";
 
@@ -108,10 +131,15 @@ export function installTikzConsoleCapture(): void {
     console[level] = (...args: unknown[]) => {
       original(...args);
       const parts = args.map(formatArg);
+      // Debug output from the agent tools must never be re-captured, or the
+      // echoed "TikZJax rendering failed" text would pollute the log stream.
+      if (parts.some((part) => part.startsWith("[tikz-debug]"))) {
+        return;
+      }
       if (parts.some((part) => part.includes("TikZJax"))) {
         const joined = parts.join(" ");
         pushCompileLog(level === "log" ? "info" : level, joined);
-        if (level !== "log" && RENDER_FAILURE_PATTERN.test(joined)) {
+        if (level !== "log" && COMPILE_FAILURE_PATTERN.test(joined)) {
           renderFailureListener?.(joined);
         }
       }

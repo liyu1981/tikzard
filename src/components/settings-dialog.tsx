@@ -1,6 +1,7 @@
 "use client";
 
 import { type ComponentType, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AgentSettings } from "@/components/agent/agent-settings";
 import {
@@ -65,12 +66,7 @@ function AboutPanel() {
 
   return (
     <div className="space-y-3">
-      <div>
-        <p className="text-sm font-semibold">{t("app.title")}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {t("app.tagline")}
-        </p>
-      </div>
+      <p className="text-sm font-semibold">{pkg.name}</p>
       <div className="space-y-1.5 rounded-xl border border-border/40 bg-background/30 p-3 text-xs leading-relaxed text-muted-foreground">
         <p>{t("settings.aboutBlurb")}</p>
         <p>{t("settings.aboutLocal")}</p>
@@ -136,77 +132,79 @@ export function SettingsDialog() {
         <TooltipContent>{t("settings.title")}</TooltipContent>
       </Tooltip>
 
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          role="presentation"
-        >
-          <div className="glass-dialog materialize flex h-[42rem] max-h-[calc(100dvh-2rem)] w-[58rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl bg-clip-padding">
-            <nav
-              aria-label={t("settings.title")}
-              className="flex w-36 shrink-0 flex-col gap-0.5 border-r border-border/40 p-2"
-            >
-              {TABS.map(({ id, labelKey, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === id}
-                  onClick={() => setTab(id)}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                    tab === id
-                      ? "bg-primary/10 font-medium text-foreground"
-                      : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="size-4 shrink-0" />
-                  <span className="truncate">{t(labelKey)}</span>
-                </button>
-              ))}
-            </nav>
+      {open &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            role="presentation"
+          >
+            <div className="glass-dialog materialize flex h-[42rem] max-h-[calc(100dvh-2rem)] w-[58rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl bg-clip-padding">
+              <nav
+                aria-label={t("settings.title")}
+                className="flex w-36 shrink-0 flex-col gap-0.5 border-r border-border/40 p-2"
+              >
+                {TABS.map(({ id, labelKey, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === id}
+                    onClick={() => setTab(id)}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      tab === id
+                        ? "bg-primary/10 font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="size-4 shrink-0" />
+                    <span className="truncate">{t(labelKey)}</span>
+                  </button>
+                ))}
+              </nav>
 
-            <div className="flex min-w-0 flex-1 flex-col">
-              <header className="apple-panel flex shrink-0 items-center justify-between px-4 py-3">
-                <h2 className="flex items-center gap-2 text-sm font-semibold">
-                  <SettingsIcon className="size-4 text-muted-foreground" />
-                  {t(
-                    TABS.find((entry) => entry.id === tab)?.labelKey ??
-                      "settings.title",
+              <div className="flex min-w-0 flex-1 flex-col">
+                <header className="apple-panel flex shrink-0 items-center justify-between px-4 py-3">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold">
+                    <SettingsIcon className="size-4 text-muted-foreground" />
+                    {t(
+                      TABS.find((entry) => entry.id === tab)?.labelKey ??
+                        "settings.title",
+                    )}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    aria-label={t("agent.close")}
+                    className="rounded-lg p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.06] hover:text-foreground active:scale-[0.95]"
+                  >
+                    <XIcon className="size-4" />
+                  </button>
+                </header>
+
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  <div
+                    hidden={tab !== "ai"}
+                    role="tabpanel"
+                    aria-label={t("settings.tabAI")}
+                  >
+                    <AgentSettings />
+                  </div>
+                  {tab === "language" && (
+                    <div role="tabpanel" aria-label={t("settings.tabLanguage")}>
+                      <LanguageSettings />
+                    </div>
                   )}
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  aria-label={t("agent.close")}
-                  className="rounded-lg p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.06] hover:text-foreground active:scale-[0.95]"
-                >
-                  <XIcon className="size-4" />
-                </button>
-              </header>
-
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                <div
-                  hidden={tab !== "ai"}
-                  role="tabpanel"
-                  aria-label={t("settings.tabAI")}
-                >
-                  <AgentSettings />
+                  {tab === "about" && (
+                    <div role="tabpanel" aria-label={t("settings.tabAbout")}>
+                      <AboutPanel />
+                    </div>
+                  )}
                 </div>
-                {tab === "language" && (
-                  <div role="tabpanel" aria-label={t("settings.tabLanguage")}>
-                    <LanguageSettings />
-                  </div>
-                )}
-                {tab === "about" && (
-                  <div role="tabpanel" aria-label={t("settings.tabAbout")}>
-                    <AboutPanel />
-                  </div>
-                )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
