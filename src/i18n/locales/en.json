@@ -24,6 +24,7 @@
   "workbench": {
     "editorLabel": "TikZ Source",
     "previewLabel": "Result",
+    "resultTabsLabel": "Result panels",
     "render": "Render",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
@@ -41,7 +42,13 @@
     "statusDone": "Rendered",
     "statusTimeout": "Still compiling or failed — check the source",
     "statusLoadError": "TeX engine failed to load",
-    "tabsLabel": "Workbench panels"
+    "tabsLabel": "Workbench panels",
+    "compileLogs": "Compile logs",
+    "compileLogsEmpty": "No compile output yet.",
+    "compileLogsClear": "Clear compile logs",
+    "autoClearLogs": "Auto-clear",
+    "logStart": "Compile started",
+    "logTimeout": "Compile timed out"
   },
   "agent": {
     "title": "AI Assistant",
@@ -58,6 +65,7 @@
     "stop": "Stop",
     "chatPlaceholder": "Ask the assistant… (Enter to send, Shift+Enter for newline)",
     "selectModelPlaceholder": "Select model",
+    "modelField": "Model",
     "thinkingLevelField": "Thinking level",
     "level": {
       "off": "Off",

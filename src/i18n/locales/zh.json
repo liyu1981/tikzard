@@ -24,6 +24,7 @@
   "workbench": {
     "editorLabel": "TikZ 源码",
     "previewLabel": "结果",
+    "resultTabsLabel": "结果面板",
     "render": "渲染",
     "zoomIn": "放大",
     "zoomOut": "缩小",
@@ -41,7 +42,13 @@
     "statusDone": "已渲染",
     "statusTimeout": "仍在编译或已失败，请检查源码",
     "statusLoadError": "TeX 引擎加载失败",
-    "tabsLabel": "工作台面板"
+    "tabsLabel": "工作台面板",
+    "compileLogs": "编译日志",
+    "compileLogsEmpty": "暂无编译输出。",
+    "compileLogsClear": "清空编译日志",
+    "autoClearLogs": "自动清空",
+    "logStart": "开始编译",
+    "logTimeout": "编译超时"
   },
   "agent": {
     "title": "AI 助手",
@@ -58,6 +65,7 @@
     "stop": "停止",
     "chatPlaceholder": "向 AI 助手提问…（Enter 发送，Shift+Enter 换行）",
     "selectModelPlaceholder": "选择模型",
+    "modelField": "模型",
     "thinkingLevelField": "思考深度",
     "level": {
       "off": "关",

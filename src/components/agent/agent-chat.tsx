@@ -830,67 +830,85 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       </div>
 
       <footer className="space-y-1.5 border-t border-border/40 p-2">
-        <div className="flex items-center gap-1.5">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              disabled={allModels.length === 0}
-              aria-label={t("agent.selectModelPlaceholder")}
-              className="flex h-8 min-w-0 flex-1 items-center justify-between gap-1 rounded-lg border border-border/50 bg-background/50 px-2 text-left text-xs outline-none transition duration-150 hover:brightness-[1.06] focus-visible:border-ring aria-expanded:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+        <div className="flex items-end gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <label
+              htmlFor="agent-model-select"
+              className="pl-0.5 text-[0.65rem] font-medium text-muted-foreground"
             >
-              <span className="truncate">
-                {selectedModelLabel ?? t("agent.selectModelPlaceholder")}
-              </span>
-              <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="max-h-72 w-(--radix-dropdown-menu-trigger-width) overflow-y-auto text-xs">
-              <DropdownMenuRadioGroup
-                value={latestModelValue ?? ""}
-                onValueChange={(value) => {
-                  const [providerId, modelId] = value.split("::", 2);
-                  if (providerId !== undefined && modelId !== undefined) {
-                    changeModel(providerId, modelId);
+              {t("agent.modelField")}
+            </label>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                id="agent-model-select"
+                disabled={allModels.length === 0}
+                aria-label={t("agent.selectModelPlaceholder")}
+                className="flex h-8 min-w-0 w-full items-center justify-between gap-1 rounded-lg border border-border/50 bg-background/50 px-2 text-left text-xs outline-none transition duration-150 hover:brightness-[1.06] focus-visible:border-ring aria-expanded:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span className="truncate">
+                  {selectedModelLabel ?? t("agent.selectModelPlaceholder")}
+                </span>
+                <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="max-h-72 w-(--radix-dropdown-menu-trigger-width) overflow-y-auto text-xs">
+                <DropdownMenuRadioGroup
+                  value={latestModelValue ?? ""}
+                  onValueChange={(value) => {
+                    const [providerId, modelId] = value.split("::", 2);
+                    if (providerId !== undefined && modelId !== undefined) {
+                      changeModel(providerId, modelId);
+                    }
+                  }}
+                >
+                  {allModels.map((m) => (
+                    <DropdownMenuRadioItem
+                      key={`${m.provider}::${m.model.id}`}
+                      value={`${m.provider}::${m.model.id}`}
+                    >
+                      {m.model.name} · {m.providerName}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <div className="flex w-24 shrink-0 flex-col gap-0.5">
+            <label
+              htmlFor="agent-thinking-select"
+              className="pl-0.5 text-[0.65rem] font-medium text-muted-foreground"
+            >
+              {t("agent.thinkingLevelField")}
+            </label>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                id="agent-thinking-select"
+                aria-label={t("agent.thinkingLevelField")}
+                className="flex h-8 min-w-0 w-full items-center justify-between gap-1 rounded-lg border border-border/50 bg-background/50 px-2 text-left text-xs outline-none transition duration-150 hover:brightness-[1.06] focus-visible:border-ring aria-expanded:brightness-110"
+              >
+                <span className="truncate">
+                  {t(`agent.level.${latest?.thinkingLevel ?? "low"}`)}
+                </span>
+                <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-(--radix-dropdown-menu-trigger-width) text-xs"
+              >
+                <DropdownMenuRadioGroup
+                  value={latest?.thinkingLevel ?? "low"}
+                  onValueChange={(value) =>
+                    changeThinking(value as ThinkingLevel)
                   }
-                }}
-              >
-                {allModels.map((m) => (
-                  <DropdownMenuRadioItem
-                    key={`${m.provider}::${m.model.id}`}
-                    value={`${m.provider}::${m.model.id}`}
-                  >
-                    {m.model.name} · {m.providerName}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label={t("agent.thinkingLevelField")}
-              className="flex h-8 w-24 items-center justify-between gap-1 rounded-lg border border-border/50 bg-background/50 px-2 text-left text-xs outline-none transition duration-150 hover:brightness-[1.06] focus-visible:border-ring aria-expanded:brightness-110"
-            >
-              <span className="truncate">
-                {t(`agent.level.${latest?.thinkingLevel ?? "low"}`)}
-              </span>
-              <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-(--radix-dropdown-menu-trigger-width) text-xs"
-            >
-              <DropdownMenuRadioGroup
-                value={latest?.thinkingLevel ?? "low"}
-                onValueChange={(value) =>
-                  changeThinking(value as ThinkingLevel)
-                }
-              >
-                {THINKING_LEVELS.map((level) => (
-                  <DropdownMenuRadioItem key={level} value={level}>
-                    {t(`agent.level.${level}`)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                >
+                  {THINKING_LEVELS.map((level) => (
+                    <DropdownMenuRadioItem key={level} value={level}>
+                      {t(`agent.level.${level}`)}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
         <form
           onSubmit={(event) => {

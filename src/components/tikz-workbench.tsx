@@ -4,8 +4,15 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentChat } from "@/components/agent/agent-chat";
+import { CompileLogs } from "@/components/compile-logs";
 import { TikzEditor } from "@/components/tikz-editor";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
+import {
+  beginCompileLog,
+  installTikzConsoleCapture,
+  pushCompileLog,
+  setRenderFailureListener,
+} from "@/lib/compile-logs";
 import { ensureTikzJax } from "@/lib/tikzjax";
 import { codeAtom, type LeftTab, leftTabAtom } from "@/lib/workbench-state";
 
@@ -16,6 +23,8 @@ type Status =
   | "done"
   | "timeout"
   | "loadError";
+
+type RightTab = "preview" | "logs";
 
 const STATUS_KEY: Record<Status, string> = {
   booting: "workbench.statusBooting",
@@ -48,6 +57,7 @@ export function TikzWorkbench() {
   const leftTab = useAtomValue(leftTabAtom);
   const setLeftTab = useSetAtom(leftTabAtom);
   const [status, setStatus] = useState<Status>("booting");
+  const [rightTab, setRightTab] = useState<RightTab>("preview");
   const [zoom, setZoom] = useState(1);
   const [doneInfo, setDoneInfo] = useState<{ at: number; ms: number } | null>(
     null,
@@ -55,11 +65,16 @@ export function TikzWorkbench() {
   const [nowTick, setNowTick] = useState(() => Date.now());
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const autoRenderedRef = useRef(false);
+  const lastRenderedCodeRef = useRef<string | null>(null);
   const renderStartRef = useRef(0);
   const codeRef = useRef(code);
   const statusRef = useRef(status);
   const doneInfoMsRef = useRef<number | null>(null);
+  const tRef = useRef(t);
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   useEffect(() => {
     codeRef.current = code;
@@ -98,20 +113,25 @@ export function TikzWorkbench() {
     setZoom(Math.max(0.25, Math.round(scale * 100) / 100));
   }, [zoom]);
 
-  const renderNow = useCallback((source: string) => {
-    const host = stageRef.current;
-    if (!host) {
-      return;
-    }
-    host.replaceChildren();
-    renderStartRef.current = performance.now();
-    setDoneInfo(null);
-    setStatus("rendering");
-    const el = document.createElement("script");
-    el.type = "text/tikz";
-    el.textContent = source;
-    host.appendChild(el);
-  }, []);
+  const renderNow = useCallback(
+    (source: string) => {
+      const host = stageRef.current;
+      if (!host) {
+        return;
+      }
+      host.replaceChildren();
+      renderStartRef.current = performance.now();
+      lastRenderedCodeRef.current = source;
+      setDoneInfo(null);
+      setStatus("rendering");
+      beginCompileLog(t("workbench.logStart"));
+      const el = document.createElement("script");
+      el.type = "text/tikz";
+      el.textContent = source;
+      host.appendChild(el);
+    },
+    [t],
+  );
 
   // Bridge the live workbench state into the agent's tools: reads see the
   // freshest source/status; writes land in the shared source atom and the
@@ -137,6 +157,7 @@ export function TikzWorkbench() {
 
   useEffect(() => {
     let cancelled = false;
+    installTikzConsoleCapture();
     ensureTikzJax()
       .then(() => {
         if (!cancelled) {
@@ -146,6 +167,7 @@ export function TikzWorkbench() {
       .catch(() => {
         if (!cancelled) {
           setStatus("loadError");
+          pushCompileLog("error", tRef.current("workbench.statusLoadError"));
         }
       });
     return () => {
@@ -153,19 +175,39 @@ export function TikzWorkbench() {
     };
   }, []);
 
-  // Recompile whenever the source changes — first render fires as soon as the
-  // engine is ready, later edits are debounced while typing.
+  // Recompile whenever the source differs from the last compile attempt —
+  // the first render fires right after the engine boots, later edits are
+  // debounced while typing. Explicit Render clicks always bypass this and
+  // force a fresh compilation via renderNow.
   useEffect(() => {
-    if (status !== "ready") {
+    if (
+      status === "booting" ||
+      status === "loadError" ||
+      status === "rendering"
+    ) {
       return;
     }
-    const delay = autoRenderedRef.current ? AUTO_RENDER_DELAY_MS : 0;
-    autoRenderedRef.current = true;
-    const timer = window.setTimeout(() => renderNow(code), delay);
+    if (code === lastRenderedCodeRef.current) {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => renderNow(code),
+      AUTO_RENDER_DELAY_MS,
+    );
     return () => {
       window.clearTimeout(timer);
     };
   }, [code, status, renderNow]);
+
+  // A failed compile surfaces as an <img> placeholder (never an <svg>), so
+  // the render observer can't see it — end the "compiling" state as soon as
+  // the runtime reports a failure instead of waiting for the watchdog.
+  useEffect(() => {
+    setRenderFailureListener(() => setStatus("timeout"));
+    return () => {
+      setRenderFailureListener(null);
+    };
+  }, []);
 
   useEffect(() => {
     const host = stageRef.current;
@@ -174,14 +216,18 @@ export function TikzWorkbench() {
     }
     const observer = new MutationObserver(() => {
       if (host.querySelector("svg")) {
-        setDoneInfo({
-          at: Date.now(),
-          ms: Math.max(
-            1,
-            Math.round(performance.now() - renderStartRef.current),
-          ),
-        });
+        const ms = Math.max(
+          1,
+          Math.round(performance.now() - renderStartRef.current),
+        );
+        setDoneInfo({ at: Date.now(), ms });
         setStatus("done");
+        pushCompileLog(
+          "info",
+          tRef.current("workbench.compileTime", {
+            time: formatDuration(ms),
+          }),
+        );
       }
     });
     observer.observe(host, { childList: true, subtree: true });
@@ -194,7 +240,10 @@ export function TikzWorkbench() {
     if (status !== "rendering") {
       return;
     }
-    const timer = window.setTimeout(() => setStatus("timeout"), 45000);
+    const timer = window.setTimeout(() => {
+      setStatus("timeout");
+      pushCompileLog("error", tRef.current("workbench.logTimeout"));
+    }, 45000);
     return () => {
       window.clearTimeout(timer);
     };
@@ -233,6 +282,11 @@ export function TikzWorkbench() {
   const TABS: { id: LeftTab; labelKey: string }[] = [
     { id: "assistant", labelKey: "agent.title" },
     { id: "instruction", labelKey: "workbench.editorLabel" },
+  ];
+
+  const RIGHT_TABS: { id: RightTab; labelKey: string }[] = [
+    { id: "preview", labelKey: "workbench.previewLabel" },
+    { id: "logs", labelKey: "workbench.compileLogs" },
   ];
 
   const tabPill =
@@ -292,112 +346,148 @@ export function TikzWorkbench() {
       </div>
       <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
-          <p className="text-sm font-medium text-muted-foreground">
-            {t("workbench.previewLabel")}
-          </p>
-          <div className="flex items-center gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 shadow-sm backdrop-blur-md">
-            <button
-              type="button"
-              aria-label={t("workbench.zoomFit")}
-              title={t("workbench.zoomFit")}
-              onClick={fitView}
-              className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              aria-label={t("workbench.zoomOut")}
-              title={t("workbench.zoomOut")}
-              onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
-              className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
-                <path d="M5 12h14" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              aria-label={t("workbench.zoomReset")}
-              title={t("workbench.zoomReset")}
-              onClick={() => setZoom(1)}
-              className="min-w-12 rounded-full px-2 py-1 text-center font-mono text-xs tabular-nums text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
-            >
-              {Math.round(zoom * 100)}%
-            </button>
-            <button
-              type="button"
-              aria-label={t("workbench.zoomIn")}
-              title={t("workbench.zoomIn")}
-              onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
-              className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div
-          ref={canvasRef}
-          className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-lg border border-black/10 bg-white p-4 shadow-inner"
-        >
           <div
-            ref={stageRef}
-            style={{ zoom }}
-            className={
-              zoom > 1 ? "[&_svg]:h-auto" : "[&_svg]:h-auto [&_svg]:max-w-full"
-            }
-          />
-        </div>
-        <div className="flex h-9 shrink-0 items-center justify-between gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 font-medium">
-            <span
-              aria-hidden="true"
-              className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[status]}`}
-            />
-            {t(STATUS_KEY[status])}
-          </span>
-          {status === "done" && doneInfo && (
-            <span className="truncate text-muted-foreground tabular-nums">
-              {t("workbench.compileTime", {
-                time: formatDuration(doneInfo.ms),
-              })}
-              {" · "}
-              {relativeRenderedAt}
-            </span>
+            role="tablist"
+            aria-label={t("workbench.resultTabsLabel")}
+            className="flex items-center gap-0.5 rounded-full border border-border/40 bg-background/50 p-0.5 shadow-sm backdrop-blur-md"
+          >
+            {RIGHT_TABS.map(({ id, labelKey }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={rightTab === id}
+                onClick={() => setRightTab(id)}
+                className={`${tabPill} ${
+                  rightTab === id
+                    ? "bg-white/15 text-foreground shadow-sm dark:bg-white/15"
+                    : "text-muted-foreground hover:bg-neutral-500/10 hover:text-foreground"
+                }`}
+              >
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
+          {rightTab === "preview" && (
+            <div className="flex items-center gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 shadow-sm backdrop-blur-md">
+              <button
+                type="button"
+                aria-label={t("workbench.zoomFit")}
+                title={t("workbench.zoomFit")}
+                onClick={fitView}
+                className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                aria-label={t("workbench.zoomOut")}
+                title={t("workbench.zoomOut")}
+                onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
+                className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                aria-label={t("workbench.zoomReset")}
+                title={t("workbench.zoomReset")}
+                onClick={() => setZoom(1)}
+                className="min-w-12 rounded-full px-2 py-1 text-center font-mono text-xs tabular-nums text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                aria-label={t("workbench.zoomIn")}
+                title={t("workbench.zoomIn")}
+                onClick={() => setZoom((z) => Math.min(4, z + 0.25))}
+                className="rounded-full p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95]"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            </div>
           )}
         </div>
+        {/* Both tab contents stay mounted so renders triggered from the
+            editor land even while the logs tab is shown. */}
+        <div
+          className={
+            rightTab === "preview"
+              ? "flex min-h-0 flex-1 flex-col gap-2"
+              : "hidden"
+          }
+        >
+          <div
+            ref={canvasRef}
+            className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-lg border border-black/10 bg-white p-4 shadow-inner"
+          >
+            <div
+              ref={stageRef}
+              style={{ zoom }}
+              className={
+                zoom > 1
+                  ? "[&_svg]:h-auto"
+                  : "[&_svg]:h-auto [&_svg]:max-w-full"
+              }
+            />
+          </div>
+          <div className="flex h-9 shrink-0 items-center justify-between gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <span
+                aria-hidden="true"
+                className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[status]}`}
+              />
+              {t(STATUS_KEY[status])}
+            </span>
+            {status === "done" && doneInfo && (
+              <span className="truncate text-muted-foreground tabular-nums">
+                {t("workbench.compileTime", {
+                  time: formatDuration(doneInfo.ms),
+                })}
+                {" · "}
+                {relativeRenderedAt}
+              </span>
+            )}
+          </div>
+        </div>
+        <CompileLogs
+          className={rightTab === "logs" ? "min-h-0 flex-1" : "hidden"}
+        />
       </div>
     </div>
   );
