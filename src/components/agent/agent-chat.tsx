@@ -60,6 +60,7 @@ import {
 import { MarkdownView } from "./markdown";
 
 const LAST_MODEL_KEY = "agent.lastModel";
+const LAST_THINKING_KEY = "agent.lastThinkingLevel";
 const MAX_PROMPT_SOURCE_CHARS = 6000;
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "low", "medium", "high"];
 /** Consecutive auto-fix retries before pausing and handing control back. */
@@ -89,6 +90,18 @@ function readLastModel(): { providerId: string; modelId: string } | undefined {
       : (JSON.parse(raw) as { providerId: string; modelId: string });
   } catch {
     return undefined;
+  }
+}
+
+/** Last thinking level the user picked, validated against known levels. */
+function readLastThinking(): ThinkingLevel {
+  try {
+    const raw = localStorage.getItem(LAST_THINKING_KEY);
+    return THINKING_LEVELS.includes(raw as ThinkingLevel)
+      ? (raw as ThinkingLevel)
+      : "low";
+  } catch {
+    return "low";
   }
 }
 
@@ -206,7 +219,14 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     bridgeRef.current = bridge ?? null;
   }, [bridge]);
 
-  const latest = sessions[sessions.length - 1];
+  // The active session is the one the agent instance is bound to — null
+  // until the user sends a message or clicks "+". Archives in the list must
+  // never masquerade as it (badge, model selector, transient states).
+  const activeId = latestRef.current?.id;
+  const latest =
+    activeId !== undefined
+      ? sessions.find((s) => s.id === activeId)
+      : undefined;
 
   const toolLabels = useMemo(() => {
     const map = new Map<string, string>();
@@ -492,7 +512,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
         title: t("agent.untitled"),
         providerId: model.providerId,
         modelId: model.modelId,
-        thinkingLevel: "low",
+        thinkingLevel: readLastThinking(),
         systemPrompt: base,
         createdAt: now,
         updatedAt: now,
@@ -506,11 +526,11 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
           (a, b) => a.updatedAt - b.updatedAt,
         ),
       );
-      setCollapsed((prev) => {
-        const expanded = new Set<string>(prev);
-        expanded.delete(next.id);
-        return expanded;
-      });
+      // Starting a fresh conversation folds every archive, so exactly one
+      // thread — the new active one — renders expanded.
+      setCollapsed(
+        new Set(sessions.filter((s) => s.id !== next.id).map((s) => s.id)),
+      );
       latestRef.current = next;
       await buildForSession(next);
       setStreaming(false);
@@ -518,9 +538,8 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       setToolChips([]);
       setRunError(null);
       return next;
-    }, [buildForSession, defaultModel, i18n.language, t]);
+    }, [buildForSession, defaultModel, i18n.language, sessions, t]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: one-time bootstrap on mount
   useEffect(() => {
     if (initialized.current) {
       return;
@@ -530,13 +549,12 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       await refreshModels().catch(() => undefined);
       const all = await listSessionsFull();
       all.sort((a, b) => a.updatedAt - b.updatedAt);
-      if (all.length > 0) {
-        // Past conversations stay visible but collapsed and detached; a page
-        // load never resumes one, so the active transcript always starts empty.
-        setSessions(all);
-        setCollapsed(new Set(all.map((s) => s.id)));
-      }
-      await createNewSession();
+      // Past conversations load as detached archives: none is activated and
+      // none is created. They start collapsed except the newest, which stays
+      // expanded for reading. handleSend lazily starts a fresh session on the
+      // first message, or the user clicks "+".
+      setSessions(all);
+      setCollapsed(new Set(all.slice(0, -1).map((s) => s.id)));
     })();
     return () => {
       agentRef.current?.abort();
@@ -630,20 +648,22 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       const remaining = sessions.filter((s) => s.id !== id);
       await deleteSession(id);
       setSessions(remaining);
-      if (id === sessions[sessions.length - 1]?.id) {
-        if (remaining.length > 0) {
-          const newest = remaining[remaining.length - 1];
-          if (newest !== undefined) {
-            await buildForSession(newest);
-          }
-        } else {
-          agentRef.current?.abort();
-          agentRef.current = null;
-          latestRef.current = null;
-        }
+      if (id === latestRef.current?.id) {
+        // Deleted the active conversation: detach instead of promoting an
+        // archive, so no prior transcript ever becomes live context. The
+        // aborted run's agent_end is rejected by the subscriber guard, so
+        // clear its transient UI state here.
+        agentRef.current?.abort();
+        agentRef.current = null;
+        latestRef.current = null;
+        setStreaming(false);
+        setStreamingText("");
+        setIsThinking(false);
+        setToolChips([]);
+        setRunError(null);
       }
     },
-    [buildForSession, sessions],
+    [sessions],
   );
 
   const toggleCollapsed = useCallback((id: string) => {
@@ -680,6 +700,9 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
 
   const changeThinking = useCallback(
     (level: ThinkingLevel) => {
+      // Remembered across sessions and reloads, like the model choice; the
+      // live agent instance only updates when a conversation is active.
+      localStorage.setItem(LAST_THINKING_KEY, level);
       const instance = agentRef.current;
       if (instance !== null && latestRef.current !== null) {
         instance.state.thinkingLevel = level;
@@ -692,10 +715,16 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
   );
 
   const allModels = listAvailableModels();
+  // Before any session exists, the selectors still surface the remembered
+  // model/thinking preferences — what the next conversation will use.
+  const rememberedModel = readLastModel();
   const latestModelValue =
     latest !== undefined
       ? `${latest.providerId}::${latest.modelId}`
-      : undefined;
+      : rememberedModel !== undefined
+        ? `${rememberedModel.providerId}::${rememberedModel.modelId}`
+        : undefined;
+  const effectiveThinking = latest?.thinkingLevel ?? readLastThinking();
   const selectedModel = allModels.find(
     (m) => `${m.provider}::${m.model.id}` === latestModelValue,
   );
@@ -865,8 +894,8 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
             <p className="text-xs text-foreground">{t("agent.noModelsHint")}</p>
           </div>
         )}
-        {sessions.map((s, index) => {
-          const isLatest = index === sessions.length - 1;
+        {sessions.map((s) => {
+          const isActive = s.id === activeId;
           const isCollapsed = collapsed.has(s.id);
           return (
             <div
@@ -887,7 +916,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
                   <span className="truncate text-xs font-medium">
                     {s.title}
                   </span>
-                  {isLatest && (
+                  {isActive && (
                     <span className="shrink-0 rounded-full border border-border/50 px-1.5 py-px text-[0.65rem] text-muted-foreground">
                       {t("agent.active")}
                     </span>
@@ -908,7 +937,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
               </div>
               {!isCollapsed && (
                 <div className="space-y-2.5 p-2">
-                  {s.messages.length === 0 && !isLatest && (
+                  {s.messages.length === 0 && !isActive && (
                     <p className="px-1 text-xs text-muted-foreground">
                       {t("agent.noMessages")}
                     </p>
@@ -916,13 +945,13 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
                   {s.messages.map((msg, i) =>
                     renderMessage(msg, i, s.messages),
                   )}
-                  {isLatest && isThinking && streamingText === "" && (
+                  {isActive && isThinking && streamingText === "" && (
                     <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
                       <LoaderIcon className="size-3 animate-spin" />
                       {t("agent.thinking")}
                     </div>
                   )}
-                  {isLatest && streamingText !== "" && (
+                  {isActive && streamingText !== "" && (
                     <div className="flex items-start gap-2">
                       <div className="glass-control mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-clip-padding">
                         <BotIcon className="size-3.5 text-foreground" />
@@ -934,7 +963,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
                       </div>
                     </div>
                   )}
-                  {isLatest && toolChips.length > 0 && (
+                  {isActive && toolChips.length > 0 && (
                     <div className="flex flex-col gap-1.5">
                       {toolChips.map((chip) => {
                         const expanded = expandedToolCalls.has(chip.id);
@@ -997,7 +1026,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
                       })}
                     </div>
                   )}
-                  {isLatest && runError !== null && (
+                  {isActive && runError !== null && (
                     <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-xs text-red-500">
                       {t("agent.errorPrefix")} {runError}
                     </div>
@@ -1097,7 +1126,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
                 className="flex h-8 min-w-0 w-full items-center justify-between gap-1 rounded-lg border border-border/50 bg-background/50 px-2 text-left text-xs outline-none transition duration-150 hover:brightness-[1.06] focus-visible:border-ring aria-expanded:brightness-110"
               >
                 <span className="truncate">
-                  {t(`agent.level.${latest?.thinkingLevel ?? "low"}`)}
+                  {t(`agent.level.${effectiveThinking}`)}
                 </span>
                 <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
               </DropdownMenuTrigger>
@@ -1106,7 +1135,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
                 className="w-(--radix-dropdown-menu-trigger-width) text-xs"
               >
                 <DropdownMenuRadioGroup
-                  value={latest?.thinkingLevel ?? "low"}
+                  value={effectiveThinking}
                   onValueChange={(value) =>
                     changeThinking(value as ThinkingLevel)
                   }
