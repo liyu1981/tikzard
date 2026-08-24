@@ -7,7 +7,10 @@ import { useTranslation } from "react-i18next";
 import { XIcon } from "@/components/agent/icons";
 import { EditableTitle } from "@/components/editable-title";
 import { OpenDocumentMenu } from "@/components/open-document-menu";
-import { SettingsDialog } from "@/components/settings-dialog";
+import {
+  SettingsDialog,
+  settingsRequestAtom,
+} from "@/components/settings-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { TikzWorkbench } from "@/components/tikz-workbench";
 import {
@@ -35,6 +38,7 @@ export default function Home() {
   const setCode = useSetAtom(codeAtom);
   const setDocTitle = useSetAtom(docTitleAtom);
   const setCurrentDocId = useSetAtom(currentDocIdAtom);
+  const setSettingsRequest = useSetAtom(settingsRequestAtom);
 
   // Leaving an open document: its latest state is already autosaved to
   // IndexedDB, so closing clears the last-opened pointer and swaps back to
@@ -127,8 +131,8 @@ export default function Home() {
       <footer className="flex h-12 shrink-0 items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <button
           type="button"
-          onClick={closeDocument}
-          title={t("welcome.backToStart")}
+          onClick={() => setSettingsRequest({ open: true, tab: "about" })}
+          title={t("settings.tabAbout")}
           className="text-carved inline-flex items-center rounded-md px-1 py-0.5 font-medium tracking-wide transition-colors hover:text-foreground"
         >
           TikZard

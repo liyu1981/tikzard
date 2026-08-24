@@ -1,5 +1,6 @@
 "use client";
 
+import { atom, useAtomValue } from "jotai";
 import { type ComponentType, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -23,6 +24,16 @@ import { getMaxVersions, setMaxVersions } from "@/lib/versions";
 import pkg from "../../package.json";
 
 type SettingsTab = "ai" | "setup" | "language" | "storage" | "about";
+
+/**
+ * Shared request channel so controls outside this component (e.g. the page
+ * footer) can open the dialog, optionally on a specific tab. The dialog
+ * watches it and applies the request whenever a new one arrives.
+ */
+export const settingsRequestAtom = atom<{
+  open: boolean;
+  tab?: SettingsTab;
+}>({ open: false });
 
 const LANGUAGES = [
   { code: "en", native: "English" },
@@ -156,8 +167,21 @@ function AboutPanel() {
  */
 export function SettingsDialog() {
   const { t } = useTranslation();
+  const request = useAtomValue(settingsRequestAtom);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<SettingsTab>("ai");
+
+  // Apply open requests coming through the shared atom (footer link etc.).
+  // A fresh object reference each set re-fires this even for the same tab.
+  useEffect(() => {
+    if (!request.open) {
+      return;
+    }
+    setOpen(true);
+    if (request.tab !== undefined) {
+      setTab(request.tab);
+    }
+  }, [request]);
 
   useEffect(() => {
     if (!open) {
