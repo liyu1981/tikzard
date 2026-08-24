@@ -28,11 +28,7 @@ export default function Home() {
       <div className="h-[calc(100dvh-7rem)] min-h-0 w-full py-6">
         <TikzWorkbench />
       </div>
-      <footer className="flex h-8 shrink-0 items-center gap-3 px-6 text-xs text-muted-foreground">
-        <span
-          aria-hidden="true"
-          className="h-px min-w-8 flex-1 bg-gradient-to-r from-transparent to-border"
-        />
+      <footer className="flex h-12 shrink-0 items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <span className="text-carved font-medium tracking-wide">
           Prompt TikZ
         </span>
@@ -48,10 +44,6 @@ export default function Home() {
           <GithubIcon className="size-3.5" />
           GitHub
         </a>
-        <span
-          aria-hidden="true"
-          className="h-px min-w-8 flex-1 bg-gradient-to-l from-transparent to-border"
-        />
       </footer>
     </main>
   );
