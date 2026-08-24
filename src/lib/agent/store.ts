@@ -5,6 +5,8 @@ import type {
 
 export interface AgentSession {
   id: string;
+  /** Document this conversation belongs to; history is isolated per doc. */
+  docId: string;
   title: string;
   providerId: string;
   modelId: string;
@@ -50,14 +52,20 @@ function txDone(tx: IDBTransaction): Promise<void> {
   });
 }
 
-export async function listSessionsFull(): Promise<AgentSession[]> {
+/** All sessions for one document, newest first. Records from before
+ * per-document isolation (no docId) never match and stay invisible. */
+export async function listSessionsForDoc(
+  docId: string,
+): Promise<AgentSession[]> {
   const db = await openDb();
   const tx = db.transaction(STORE, "readonly");
   const request = tx.objectStore(STORE).getAll() as IDBRequest<AgentSession[]>;
   const sessions = await txResult(request);
   await txDone(tx);
   db.close();
-  return sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+  return sessions
+    .filter((session) => session.docId === docId)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getSession(
@@ -86,6 +94,18 @@ export async function deleteSession(id: string): Promise<void> {
   const db = await openDb();
   const tx = db.transaction(STORE, "readwrite");
   tx.objectStore(STORE).delete(id);
+  await txDone(tx);
+  db.close();
+}
+
+/** Drop every conversation belonging to a document (used on doc delete). */
+export async function deleteSessionsByDoc(docId: string): Promise<void> {
+  const sessions = await listSessionsForDoc(docId);
+  const db = await openDb();
+  const tx = db.transaction(STORE, "readwrite");
+  for (const session of sessions) {
+    tx.objectStore(STORE).delete(session.id);
+  }
   await txDone(tx);
   db.close();
 }

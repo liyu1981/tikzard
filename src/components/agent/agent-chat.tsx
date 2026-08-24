@@ -41,7 +41,7 @@ import {
 import {
   type AgentSession,
   deleteSession,
-  listSessionsFull,
+  listSessionsForDoc,
   saveSession,
 } from "@/lib/agent/store";
 import { buildAgentTools } from "@/lib/agent/tools";
@@ -88,6 +88,13 @@ interface ToolChip {
 
 interface AgentChatProps {
   bridge?: EditorMutationBridge | null;
+  /**
+   * Open document the conversation history belongs to. History is isolated
+   * per document: switching docId detaches the live agent and swaps the
+   * archive list. Null only in the transient state before the workbench
+   * mints an id for a brand-new document.
+   */
+  docId: string | null;
   className?: string;
 }
 
@@ -232,7 +239,7 @@ function ThinkingDisclosure({
   );
 }
 
-export function AgentChat({ bridge, className }: AgentChatProps) {
+export function AgentChat({ bridge, docId, className }: AgentChatProps) {
   const { t, i18n } = useTranslation();
   const leftTab = useAtomValue(leftTabAtom);
   const compileLogs = useAtomValue(compileLogsAtom);
@@ -254,7 +261,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
   const latestRef = useRef<AgentSession | null>(null);
   const bridgeRef = useRef(bridge ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const initialized = useRef(false);
+  const docIdRef = useRef(docId);
   const lastSeenLogIdRef = useRef(getLastCompileLogId());
   const autoFixChainRef = useRef(0);
   const pendingFailureRef = useRef<CompileLogEntry | null>(null);
@@ -564,6 +571,12 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
         setRunError(t("agent.noModelsHint"));
         return null;
       }
+      // Unreachable in practice: the workbench mints a doc id eagerly on
+      // mount, before the chat UI can start a session. Refuse rather than
+      // create an orphaned conversation no document will ever list.
+      if (docIdRef.current === null) {
+        return null;
+      }
       agentRef.current?.abort();
       const now = Date.now();
       const base = t("agent.systemPrompt", {
@@ -571,6 +584,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       });
       const next: AgentSession = {
         id: newId(),
+        docId: docIdRef.current,
         title: t("agent.untitled"),
         providerId: model.providerId,
         modelId: model.modelId,
@@ -603,27 +617,50 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       return next;
     }, [buildForSession, defaultModel, i18n.language, sessions, t]);
 
+  // One-time provider catalog refresh; per-document work lives in the
+  // effect below so switching documents re-runs it.
   useEffect(() => {
-    if (initialized.current) {
-      return;
-    }
-    initialized.current = true;
-    void (async () => {
-      await refreshModels().catch(() => undefined);
-      const all = await listSessionsFull();
-      all.sort((a, b) => a.updatedAt - b.updatedAt);
-      // Past conversations load as detached archives: none is activated and
-      // none is created. They start collapsed except the newest, which stays
-      // expanded for reading. handleSend lazily starts a fresh session on the
-      // first message, or the user clicks "+".
-      setSessions(all);
-      setCollapsed(new Set(all.slice(0, -1).map((s) => s.id)));
-    })();
-    return () => {
-      agentRef.current?.abort();
-      agentRef.current = null;
-    };
+    void refreshModels().catch(() => undefined);
   }, []);
+
+  // Per-document isolation. Whenever the open document changes: detach the
+  // live agent and transient UI, then load that document's conversations as
+  // detached archives — none activated, none created (newest expanded for
+  // reading). handleSend lazily starts a fresh session on the first message.
+  useEffect(() => {
+    let cancelled = false;
+    docIdRef.current = docId;
+    agentRef.current?.abort();
+    agentRef.current = null;
+    latestRef.current = null;
+    pendingFailureRef.current = null;
+    autoFixChainRef.current = 0;
+    setStreaming(false);
+    setStreamingText("");
+    setStreamingThinking("");
+    setIsThinking(false);
+    setToolChips([]);
+    setRunError(null);
+    if (docId === null) {
+      // No open document (transient before the workbench mints an id).
+      setSessions([]);
+      setCollapsed(new Set());
+      return () => {
+        cancelled = true;
+      };
+    }
+    void listSessionsForDoc(docId).then((all) => {
+      if (cancelled) {
+        return;
+      }
+      const ascending = [...all].sort((a, b) => a.updatedAt - b.updatedAt);
+      setSessions(ascending);
+      setCollapsed(new Set(ascending.slice(0, -1).map((s) => s.id)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [docId]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-scroll whenever transient streaming output grows
   useEffect(() => {

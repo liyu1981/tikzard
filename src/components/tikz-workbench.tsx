@@ -497,6 +497,18 @@ export function TikzWorkbench() {
     hydratedRef.current = true;
   }, []);
 
+  // Mint the document id eagerly instead of waiting for the debounced
+  // autosave: per-document features (AI chat history isolation) key off it
+  // immediately, even before the first edit lands.
+  useEffect(() => {
+    if (!hydratedRef.current || currentDocId !== null) {
+      return;
+    }
+    const id = crypto.randomUUID();
+    setCurrentDocId(id);
+    setLastOpenedDocId(id);
+  }, [currentDocId, setCurrentDocId]);
+
   // Debounced autosave of the current document (code + title + latest
   // thumbnail) to IndexedDB. A null currentDocId mints a fresh id, which is
   // how "New document" forks into its own record; that minted id also
@@ -769,7 +781,11 @@ export function TikzWorkbench() {
           </div>
         </div>
         <div className={leftTab === "assistant" ? "min-h-0 flex-1" : "hidden"}>
-          <AgentChat bridge={agentBridge} className="h-full" />
+          <AgentChat
+            bridge={agentBridge}
+            docId={currentDocId}
+            className="h-full"
+          />
         </div>
       </div>
       <VersionBrowser
