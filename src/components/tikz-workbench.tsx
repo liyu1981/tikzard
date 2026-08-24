@@ -644,30 +644,30 @@ export function TikzWorkbench() {
             ))}
           </div>
         </div>
-        {leftTab === "instruction" ? (
-          <>
-            <TikzEditor value={code} onChange={setCode} />
-            <div className="flex h-9 shrink-0 items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => renderNow(code)}
-                  className="glass-control !border-border/60 rounded-lg bg-clip-padding px-4 py-1.5 text-sm font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {t("workbench.render")}
-                </button>
-              </div>
-              <p className="hidden truncate text-xs text-muted-foreground sm:block">
-                {t("workbench.hint")}
-              </p>
+        {/* Both panes stay mounted; tabs only toggle visibility, so the
+            assistant keeps its session list, expanded chats, and live agent
+            instance across switches. */}
+        <div className={leftTab === "instruction" ? "contents" : "hidden"}>
+          <TikzEditor value={code} onChange={setCode} />
+          <div className="flex h-9 shrink-0 items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => renderNow(code)}
+                className="glass-control !border-border/60 rounded-lg bg-clip-padding px-4 py-1.5 text-sm font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t("workbench.render")}
+              </button>
             </div>
-          </>
-        ) : (
-          <div className="min-h-0 flex-1">
-            <AgentChat bridge={agentBridge} className="h-full" />
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">
+              {t("workbench.hint")}
+            </p>
           </div>
-        )}
+        </div>
+        <div className={leftTab === "assistant" ? "min-h-0 flex-1" : "hidden"}>
+          <AgentChat bridge={agentBridge} className="h-full" />
+        </div>
       </div>
       <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
