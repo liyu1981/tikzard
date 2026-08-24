@@ -78,6 +78,8 @@
     "send": "Send",
     "stop": "Stop",
     "chatPlaceholder": "Ask the assistant… (Enter to send, Shift+Enter for newline)",
+    "showMore": "Show more",
+    "showLess": "Show less",
     "selectModelPlaceholder": "Select model",
     "modelField": "Model",
     "searchModelPlaceholder": "Search models…",

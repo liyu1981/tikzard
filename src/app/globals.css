@@ -281,3 +281,18 @@ body {
     border-color: var(--foreground);
   }
 }
+
+/* Letterpress / engraved text: a light edge below and a dark edge above
+   make the glyphs read as pressed into the surface. Derived from theme
+   tokens so it works on both light and dark backgrounds. */
+.text-carved {
+  text-shadow:
+    0 1px 1px color-mix(in oklch, white 45%, transparent),
+    0 -1px 1px color-mix(in oklch, black 22%, transparent);
+}
+
+.dark .text-carved {
+  text-shadow:
+    0 1px 1px color-mix(in oklch, black 55%, transparent),
+    0 -1px 1px color-mix(in oklch, white 10%, transparent);
+}

@@ -78,6 +78,8 @@
     "send": "发送",
     "stop": "停止",
     "chatPlaceholder": "向 AI 助手提问…（Enter 发送，Shift+Enter 换行）",
+    "showMore": "展开更多",
+    "showLess": "收起",
     "selectModelPlaceholder": "选择模型",
     "modelField": "模型",
     "searchModelPlaceholder": "搜索模型…",

@@ -629,8 +629,8 @@ export function TikzWorkbench() {
     "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition duration-150";
 
   return (
-    <div className="materialize grid h-full min-h-0 w-full grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
-      <div className="glass-control flex min-h-0 min-h-[calc(100dvh-7rem)] flex-col gap-2 rounded-xl bg-clip-padding p-4">
+    <div className="materialize grid h-full min-h-0 w-full grid-cols-1 grid-rows-[repeat(2,minmax(0,1fr))] gap-4 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
+      <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
           <div
             role="tablist"
@@ -680,7 +680,7 @@ export function TikzWorkbench() {
           </div>
         )}
       </div>
-      <div className="glass-control flex min-h-0 min-h-[calc(100dvh-7rem)] flex-col gap-2 rounded-xl bg-clip-padding p-4">
+      <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
           <div
             role="tablist"

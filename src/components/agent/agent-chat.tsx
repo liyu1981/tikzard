@@ -128,6 +128,43 @@ function formatTime(timestamp: number): string {
   });
 }
 
+/** User messages longer than this many words render folded by default. */
+const USER_MSG_FOLD_WORDS = 100;
+
+/**
+ * Right-aligned user bubble. Long messages collapse to three lines with a
+ * show-more/show-less toggle; each bubble owns its expanded state so
+ * transcript updates during streaming never reset it.
+ */
+function UserMessageBubble({ text }: { text: string }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const wordCount = text.trim().split(/\s+/).length;
+  const fold = wordCount > USER_MSG_FOLD_WORDS;
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[88%] rounded-2xl bg-primary px-3 py-2 text-sm text-white">
+        <p
+          className={`whitespace-pre-wrap break-words ${
+            fold && !expanded ? "line-clamp-3" : ""
+          }`}
+        >
+          {text}
+        </p>
+        {fold && (
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="mt-1 block text-xs font-medium text-white/75 underline-offset-2 transition-colors hover:text-white hover:underline"
+          >
+            {expanded ? t("agent.showLess") : t("agent.showMore")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function AgentChat({ bridge, className }: AgentChatProps) {
   const { t, i18n } = useTranslation();
   const leftTab = useAtomValue(leftTabAtom);
@@ -657,13 +694,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     allMessages?: AgentMessage[],
   ) => {
     if (message.role === "user") {
-      return (
-        <div key={index} className="flex justify-end">
-          <div className="max-w-[88%] rounded-2xl bg-primary px-3 py-2 text-sm text-white">
-            <p className="whitespace-pre-wrap">{messageText(message)}</p>
-          </div>
-        </div>
-      );
+      return <UserMessageBubble key={index} text={messageText(message)} />;
     }
     if (message.role === "toolResult") {
       return null;
