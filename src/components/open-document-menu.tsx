@@ -1,12 +1,14 @@
 "use client";
 
 import { useAtomValue, useSetAtom } from "jotai";
-import { useState } from "react";
+import type * as React from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TrashIcon } from "@/components/agent/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -21,7 +23,11 @@ import {
   codeAtom,
   currentDocIdAtom,
   docTitleAtom,
+  NEW_DOCUMENT_CODE,
 } from "@/lib/workbench-state";
+
+/** Documents shown per page in the 3×3 gallery grid. */
+const PAGE_SIZE = 9;
 
 function FolderOpenIcon() {
   return (
@@ -37,6 +43,81 @@ function FolderOpenIcon() {
       aria-hidden="true"
     >
       <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
+function PlusIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
+
+function ImagePlaceholderIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
   );
 }
@@ -57,6 +138,29 @@ function formatRelative(at: number): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
+interface DocumentRow extends TikzDocumentMeta {
+  thumbUrl?: string;
+}
+
+/** Thumbnail slot: the stored snapshot, or a placeholder when missing. */
+function DocThumb({ url }: { url?: string }) {
+  if (!url) {
+    return (
+      <span className="flex h-32 w-32 shrink-0 items-center justify-center rounded-xl border border-border/40 bg-background/50 text-muted-foreground/50 shadow-sm">
+        <ImagePlaceholderIcon />
+      </span>
+    );
+  }
+  return (
+    // biome-ignore lint/performance/noImgElement: IndexedDB blob URLs can't go through next/image's server optimizer in this offline-first app
+    <img
+      src={url}
+      alt=""
+      className="h-32 w-32 shrink-0 rounded-xl border border-border/40 bg-white object-contain shadow-md"
+    />
+  );
+}
+
 /** Dropdown document browser anchored to the header's folder button. */
 export function OpenDocumentMenu() {
   const { t } = useTranslation();
@@ -64,14 +168,47 @@ export function OpenDocumentMenu() {
   const setDocTitle = useSetAtom(docTitleAtom);
   const setCurrentDocId = useSetAtom(currentDocIdAtom);
   const currentDocId = useAtomValue(currentDocIdAtom);
-  const [docs, setDocs] = useState<TikzDocumentMeta[]>([]);
+  const [docs, setDocs] = useState<DocumentRow[]>([]);
+  const [page, setPage] = useState(0);
+  const thumbUrlsRef = useRef<string[]>([]);
+
+  useEffect(
+    () => () => {
+      for (const url of thumbUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+    },
+    [],
+  );
 
   async function refresh() {
     try {
-      setDocs(await listDocuments());
+      const metas = await listDocuments();
+      for (const url of thumbUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+      thumbUrlsRef.current = [];
+      setDocs(
+        metas.map((meta) => {
+          if (!meta.thumbnail) {
+            return meta;
+          }
+          const url = URL.createObjectURL(meta.thumbnail);
+          thumbUrlsRef.current.push(url);
+          return { ...meta, thumbUrl: url };
+        }),
+      );
     } catch {
       setDocs([]);
     }
+  }
+
+  // Start a fresh document: seed the starter source and clear the id so the
+  // workbench autosave mints a brand-new record on its next tick.
+  function handleNew() {
+    setCode(NEW_DOCUMENT_CODE);
+    setDocTitle(t("documents.untitled"));
+    setCurrentDocId(null);
   }
 
   async function handleOpen(id: string) {
@@ -89,10 +226,15 @@ export function OpenDocumentMenu() {
     setDocs((prev) => prev.filter((doc) => doc.id !== id));
   }
 
+  const totalPages = Math.max(1, Math.ceil(docs.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = docs.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
   return (
     <DropdownMenu
       onOpenChange={(open) => {
         if (open) {
+          setPage(0);
           void refresh();
         }
       }}
@@ -103,56 +245,99 @@ export function OpenDocumentMenu() {
       >
         <FolderOpenIcon />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72 p-1 text-xs">
-        <DropdownMenuLabel className="px-2 py-1.5">
-          {t("documents.open")}
-        </DropdownMenuLabel>
+      <DropdownMenuContent align="start" className="w-[20rem] p-1 text-xs">
+        <div className="flex items-center justify-between gap-2 px-1 pb-1 pt-0.5">
+          <DropdownMenuLabel className="p-0">
+            {t("documents.open")}
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onSelect={handleNew}
+            className="glass-control !border-border/60 m-0 h-auto w-fit shrink-0 rounded-full bg-clip-padding px-2.5 py-1.5 text-xs font-medium text-foreground/90 shadow-sm transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98]"
+          >
+            <PlusIcon className="size-3.5" />
+            {t("documents.new")}
+          </DropdownMenuItem>
+        </div>
         <DropdownMenuSeparator />
-        <div className="max-h-72 overflow-y-auto px-1 pb-1">
-          {docs.length === 0 ? (
-            <p className="px-2 py-6 text-center text-muted-foreground">
+        {/* Up to 9 documents per page; the list scrolls internally when a
+            full page is taller than the viewport allows. */}
+        <div className="flex max-h-[32rem] flex-col gap-1.5 overflow-y-auto px-1 pb-1">
+          {pageRows.map((doc) => {
+            const active = doc.id === currentDocId;
+            return (
+              <div
+                key={doc.id}
+                className="group relative flex items-center gap-2 rounded-xl bg-white p-2 transition duration-150 hover:-translate-y-px active:scale-[0.99]"
+              >
+                <button
+                  type="button"
+                  onClick={() => void handleOpen(doc.id)}
+                  title={doc.title}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <DocThumb url={doc.thumbUrl} />
+                  <span className="flex min-w-0 flex-1 flex-col items-stretch gap-0.5 overflow-hidden border-l border-border/30 pl-2">
+                    <span
+                      className={`block w-full truncate text-xs ${
+                        active
+                          ? "font-semibold text-foreground"
+                          : "font-medium text-foreground/90"
+                      }`}
+                    >
+                      {doc.title}
+                    </span>
+                    <span className="block w-full truncate text-[0.65rem] text-muted-foreground tabular-nums">
+                      {t("documents.editedAgo", {
+                        time: formatRelative(doc.updatedAt),
+                      })}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(doc.id)}
+                  aria-label={t("documents.delete")}
+                  title={t("documents.delete")}
+                  className="absolute right-1 top-1 rounded-md bg-background/80 p-1 text-muted-foreground opacity-0 shadow-sm backdrop-blur-sm transition duration-150 hover:bg-foreground/[0.06] hover:text-red-500 focus-visible:opacity-100 group-hover:opacity-100 active:scale-[0.95]"
+                >
+                  <TrashIcon className="size-3" />
+                </button>
+              </div>
+            );
+          })}
+          {docs.length === 0 && (
+            <p className="self-center py-10 text-center text-muted-foreground">
               {t("documents.empty")}
             </p>
-          ) : (
-            <div className="space-y-0.5">
-              {docs.map((doc) => {
-                const active = doc.id === currentDocId;
-                return (
-                  <div
-                    key={doc.id}
-                    className={`flex items-center gap-1 rounded-lg ${
-                      active ? "bg-primary/10" : "hover:bg-foreground/[0.06]"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => void handleOpen(doc.id)}
-                      className="min-w-0 flex-1 px-2 py-1.5 text-left"
-                    >
-                      <span className="block truncate font-medium text-foreground/90">
-                        {doc.title}
-                      </span>
-                      <span className="block text-[0.65rem] text-muted-foreground tabular-nums">
-                        {t("documents.editedAgo", {
-                          time: formatRelative(doc.updatedAt),
-                        })}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete(doc.id)}
-                      aria-label={t("documents.delete")}
-                      title={t("documents.delete")}
-                      className="mr-1 rounded-md p-1 text-muted-foreground transition duration-150 hover:bg-foreground/[0.06] hover:text-red-500 active:scale-[0.95]"
-                    >
-                      <TrashIcon className="size-3" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
           )}
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border/40 px-2 pt-1 pb-0.5">
+            <button
+              type="button"
+              aria-label={t("documents.prevPage")}
+              title={t("documents.prevPage")}
+              disabled={safePage === 0}
+              onClick={() => setPage(safePage - 1)}
+              className="rounded-full p-1 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeftIcon />
+            </button>
+            <span className="text-muted-foreground tabular-nums">
+              {safePage + 1} / {totalPages}
+            </span>
+            <button
+              type="button"
+              aria-label={t("documents.nextPage")}
+              title={t("documents.nextPage")}
+              disabled={safePage >= totalPages - 1}
+              onClick={() => setPage(safePage + 1)}
+              className="rounded-full p-1 text-muted-foreground transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRightIcon />
+            </button>
+          </div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

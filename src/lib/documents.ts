@@ -2,8 +2,8 @@
 
 /**
  * IndexedDB-backed document store for the workbench. Documents live entirely
- * on-device: { id, title, code, updatedAt }. The API is promise-based so the
- * UI never blocks on storage.
+ * on-device: { id, title, code, updatedAt, thumbnail? }. The API is
+ * promise-based so the UI never blocks on storage.
  */
 
 export interface TikzDocument {
@@ -11,12 +11,15 @@ export interface TikzDocument {
   title: string;
   code: string;
   updatedAt: number;
+  /** Downscaled PNG snapshot of the rendered result (≤640px longest side). */
+  thumbnail?: Blob;
 }
 
 export interface TikzDocumentMeta {
   id: string;
   title: string;
   updatedAt: number;
+  thumbnail?: Blob;
 }
 
 const DB_NAME = "prompt-tikz";
@@ -90,6 +93,7 @@ export function listDocuments(): Promise<TikzDocumentMeta[]> {
         id: doc.id,
         title: doc.title,
         updatedAt: doc.updatedAt,
+        thumbnail: doc.thumbnail,
       }))
       .sort((a, b) => b.updatedAt - a.updatedAt),
   );

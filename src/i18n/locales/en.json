@@ -19,6 +19,9 @@
   },
   "documents": {
     "open": "Open document",
+    "new": "New document",
+    "prevPage": "Previous page",
+    "nextPage": "Next page",
     "empty": "No saved documents yet.",
     "editedAgo": "Edited {{time}} ago",
     "delete": "Delete document",

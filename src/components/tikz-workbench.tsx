@@ -27,6 +27,7 @@ import {
 } from "@/lib/compile-logs";
 import { loadMostRecentDocument, saveDocument } from "@/lib/documents";
 import {
+  canvasToPngBlob,
   downloadBlob,
   measureSvgNaturalSize,
   renderSvgToCanvas,
@@ -163,6 +164,12 @@ const AUTO_RENDER_DELAY_MS = 600;
 /** Raster oversampling factor for PNG/PDF file exports (3× ≈ print quality). */
 const EXPORT_SCALE = 3;
 
+/** Longest side allowed for stored document thumbnails. */
+const THUMBNAIL_MAX_PX = 640;
+
+/** Delay after a successful compile before capturing the thumbnail. */
+const THUMBNAIL_DELAY_MS = 1500;
+
 export function TikzWorkbench() {
   const { t } = useTranslation();
   const [code, setCode] = useAtom(codeAtom);
@@ -176,6 +183,7 @@ export function TikzWorkbench() {
   const [rightTab, setRightTab] = useState<RightTab>("preview");
   const [zoom, setZoom] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [thumbnail, setThumbnail] = useState<Blob | null>(null);
   const [doneInfo, setDoneInfo] = useState<{ at: number; ms: number } | null>(
     null,
   );
@@ -186,9 +194,9 @@ export function TikzWorkbench() {
   const renderSeqRef = useRef(0);
   const renderStartRef = useRef(0);
   const hydratedRef = useRef(false);
-  const docIdRef = useRef<string | null>(null);
   const codeRef = useRef(code);
   const statusRef = useRef(status);
+  const zoomRef = useRef(zoom);
   const doneInfoMsRef = useRef<number | null>(null);
   const tRef = useRef(t);
 
@@ -203,6 +211,10 @@ export function TikzWorkbench() {
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   useEffect(() => {
     doneInfoMsRef.current = doneInfo?.ms ?? null;
@@ -413,7 +425,7 @@ export function TikzWorkbench() {
   }, []);
 
   // Hydrate the workbench with the most recently edited document from
-  // IndexedDB, or start a fresh (unsaved) document id when none exists.
+  // IndexedDB, or start with the example source and no document id.
   useEffect(() => {
     let cancelled = false;
     void loadMostRecentDocument().then((doc) => {
@@ -421,7 +433,6 @@ export function TikzWorkbench() {
         return;
       }
       if (doc !== undefined) {
-        docIdRef.current = doc.id;
         setCode(doc.code);
         setDocTitle(doc.title);
         setCurrentDocId(doc.id);
@@ -433,22 +444,72 @@ export function TikzWorkbench() {
     };
   }, [setCode, setCurrentDocId, setDocTitle]);
 
-  // Debounced autosave of the current document (code + title) to IndexedDB.
+  // Debounced autosave of the current document (code + title + latest
+  // thumbnail) to IndexedDB. A null currentDocId mints a fresh id, which is
+  // how "New document" forks into its own record.
   useEffect(() => {
     if (!hydratedRef.current) {
       return;
     }
     const timer = window.setTimeout(() => {
-      let id = currentDocId ?? docIdRef.current;
+      let id = currentDocId;
       if (id === null) {
         id = crypto.randomUUID();
-        docIdRef.current = id;
         setCurrentDocId(id);
       }
-      void saveDocument({ id, title: docTitle, code, updatedAt: Date.now() });
+      void saveDocument({
+        id,
+        title: docTitle,
+        code,
+        thumbnail: thumbnail ?? undefined,
+        updatedAt: Date.now(),
+      });
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [code, currentDocId, docTitle, setCurrentDocId]);
+  }, [code, currentDocId, docTitle, setCurrentDocId, thumbnail]);
+
+  // A fresh (unsaved) document — e.g. right after "New document" — starts
+  // without a snapshot instead of inheriting the previous document's one.
+  useEffect(() => {
+    if (currentDocId === null) {
+      setThumbnail(null);
+    }
+  }, [currentDocId]);
+
+  // After every successful compile, capture a downscaled snapshot of the
+  // drawing as the document's stored thumbnail. Best-effort: failures leave
+  // the previous thumbnail in place.
+  useEffect(() => {
+    if (status !== "done") {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      const svg = canvasRef.current?.querySelector("svg");
+      if (!svg || cancelled) {
+        return;
+      }
+      const natural = measureSvgNaturalSize(svg, zoomRef.current);
+      const scale = Math.min(
+        1,
+        THUMBNAIL_MAX_PX / Math.max(natural.width, natural.height),
+      );
+      renderSvgToCanvas(svg, natural.width * scale, natural.height * scale)
+        .then((canvas) => canvasToPngBlob(canvas))
+        .then((blob) => {
+          if (!cancelled) {
+            setThumbnail(blob);
+          }
+        })
+        .catch(() => {
+          // keep the previous thumbnail
+        });
+    }, THUMBNAIL_DELAY_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [status]);
 
   // Recompile whenever the source differs from the last compile attempt —
   // the first render fires right after the engine boots, later edits are
