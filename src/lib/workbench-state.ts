@@ -25,6 +25,15 @@ export const NEW_DOCUMENT_CODE = String.raw`% Set x unit vector to 3 cm per unit
 export type LeftTab = "instruction" | "assistant";
 
 /**
+ * Which top-level view fills the content area: while IndexedDB is being
+ * checked ("loading") nothing renders, first-run users with zero stored
+ * documents land on the welcome page, everyone else gets the workbench.
+ */
+export type EntryGate = "loading" | "welcome" | "workbench";
+
+export const entryGateAtom = atom<EntryGate>("loading");
+
+/**
  * Shared workbench state (jotai). The TikZ source lives here so the editor,
  * the preview, and the AI assistant's mutation bridge always observe the same
  * value regardless of which left-panel tab is mounted.

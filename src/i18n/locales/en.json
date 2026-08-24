@@ -122,5 +122,15 @@
     "modelsRefreshed": "Model catalog refreshed.",
     "autoFixMessage": "The TikZ preview failed to compile. Compiler output:\n{{logs}}\n\nPlease fix the source and call set_tikz_source with the complete corrected tikzpicture.",
     "autoFixLimitReached": "Auto-fix paused after {{count}} consecutive failed compiles — review the source yourself, or send a message to continue."
+  },
+  "welcome": {
+    "tagline": "A local-first TikZ workbench — write LaTeX on the left, see the rendered figure on the right.",
+    "cta": "Start a new drawing",
+    "f1Title": "Write & preview",
+    "f1Desc": "Type LaTeX and WebAssembly TikZJax renders the figure instantly — no server round-trip.",
+    "f2Title": "AI assistant",
+    "f2Desc": "Describe the drawing in chat; the agent writes the TikZ, compiles it, and fixes errors until it renders.",
+    "f3Title": "Private & offline",
+    "f3Desc": "Documents and chat sessions live only on this device. Bring your own keys; no server, no account."
   }
 }

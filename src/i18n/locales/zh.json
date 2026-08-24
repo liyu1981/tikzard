@@ -122,5 +122,15 @@
     "modelsRefreshed": "模型列表已刷新。",
     "autoFixMessage": "TikZ 预览编译失败。编译输出：\n{{logs}}\n\n请修复源码，并调用 set_tikz_source 提交完整修正后的 tikzpicture。",
     "autoFixLimitReached": "连续 {{count}} 次编译失败后已暂停自动修复——请自行检查源码，或发送消息继续。"
+  },
+  "welcome": {
+    "tagline": "本地优先的 TikZ 工作台——左侧编写 LaTeX，右侧即时看到渲染图形。",
+    "cta": "开始新的绘图",
+    "f1Title": "编写与预览",
+    "f1Desc": "输入 LaTeX，WebAssembly TikZJax 即时渲染图形——无需服务器。",
+    "f2Title": "AI 助手",
+    "f2Desc": "在对话中描述想要的图形，智能体会编写 TikZ、编译并修复错误，直到成功渲染。",
+    "f3Title": "私密离线",
+    "f3Desc": "文档与会话只保存在本设备上；自带密钥，无服务器、无账户。"
   }
 }

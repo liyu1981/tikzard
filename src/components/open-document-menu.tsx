@@ -23,6 +23,7 @@ import {
   codeAtom,
   currentDocIdAtom,
   docTitleAtom,
+  entryGateAtom,
   NEW_DOCUMENT_CODE,
 } from "@/lib/workbench-state";
 
@@ -168,6 +169,7 @@ export function OpenDocumentMenu() {
   const setDocTitle = useSetAtom(docTitleAtom);
   const setCurrentDocId = useSetAtom(currentDocIdAtom);
   const currentDocId = useAtomValue(currentDocIdAtom);
+  const setEntryGate = useSetAtom(entryGateAtom);
   const [docs, setDocs] = useState<DocumentRow[]>([]);
   const [page, setPage] = useState(0);
   const thumbUrlsRef = useRef<string[]>([]);
@@ -204,11 +206,13 @@ export function OpenDocumentMenu() {
   }
 
   // Start a fresh document: seed the starter source and clear the id so the
-  // workbench autosave mints a brand-new record on its next tick.
+  // workbench autosave mints a brand-new record on its next tick. Also
+  // dismiss the welcome page if it was showing.
   function handleNew() {
     setCode(NEW_DOCUMENT_CODE);
     setDocTitle(t("documents.untitled"));
     setCurrentDocId(null);
+    setEntryGate("workbench");
   }
 
   async function handleOpen(id: string) {
@@ -219,11 +223,13 @@ export function OpenDocumentMenu() {
     setCode(doc.code);
     setDocTitle(doc.title);
     setCurrentDocId(doc.id);
+    setEntryGate("workbench");
   }
 
   async function handleDelete(id: string) {
     await deleteDocument(id);
     setDocs((prev) => prev.filter((doc) => doc.id !== id));
+    window.dispatchEvent(new Event("tikzard:docs-changed"));
   }
 
   const totalPages = Math.max(1, Math.ceil(docs.length / PAGE_SIZE));
