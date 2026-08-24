@@ -8,6 +8,7 @@
   "settings": {
     "title": "设置",
     "tabAI": "AI 助手",
+    "tabAgentSetup": "智能体设置",
     "tabLanguage": "语言",
     "tabAbout": "关于",
     "languageLabel": "界面语言",
@@ -15,6 +16,7 @@
     "aboutBlurb": "Prompt TikZ 是一个本地优先的 TikZ 提示词工作台：所有编译都在浏览器本地完成。",
     "aboutLocal": "无需服务器、无需账号——你的图形与对话仅保存在本设备上。",
     "aboutAgent": "AI 助手自带密钥（BYOK）：凭据只保存在本浏览器中，并直接连接你选择的提供商。",
+    "agentSetupHint": "每个新会话都会发送给 AI 助手的基础系统提示词；回答语言的指令跟随界面语言。发送消息时还会附上当前 TikZ 源码，让模型看到你的图形。",
     "version": "版本"
   },
   "documents": {
@@ -80,6 +82,7 @@
     "chatPlaceholder": "向 AI 助手提问…（Enter 发送，Shift+Enter 换行）",
     "showMore": "展开更多",
     "showLess": "收起",
+    "contextOverflowRetry": "模型上下文已满——已压缩会话并重试…",
     "selectModelPlaceholder": "选择模型",
     "modelField": "模型",
     "searchModelPlaceholder": "搜索模型…",
@@ -95,7 +98,7 @@
     "toolArgs": "参数",
     "toolResult": "结果",
     "toolError": "错误",
-    "systemPrompt": "你是嵌入在 Prompt TikZ（一个本地优先的 TikZ 工作台）中的 AI 助手，也是一位 TikZ 专家——擅长用简洁精确的 TikZ 代码绘制数学与科学图形（函数图像、几何图、物理与化学示意图等）。\n\n用户在左侧编辑器编写 TikZ/LaTeX 源码，并在右侧预览渲染结果。你可以读取当前源码（get_tikz_source）、查询编译状态（get_render_status），并在图形需要修改时用 set_tikz_source 替换编辑器中的源码。始终发送完整更新后的 tikzpicture，不要只发送片段。请用{{language}}回答。\n\n一个基础的完整文档如下：\n\n\\begin{tikzpicture}  % draw x axis with arrow tip, labeled $x$\n  \\draw[->, thick] (-0.5,0) -- (4.5,0) node[right] {$x$};\n  % draw y axis with arrow tip, labeled $y$\n  \\draw[->, thick] (0,-0.5) -- (0,3) node[above] {$y$};\n  % draw the parabola y = x^2 / 4 for x in [0, 3]\n  \\draw[domain=0:3, smooth, thick, blue!70!black]\n    plot ({\\x}, {0.25*\\x*\\x});\n\\end{tikzpicture}\n\n当用户要求绘制新图形或修改图形时，不要把 TikZ 代码粘贴到对话里——应调用 set_tikz_source 发送完整更新后的 tikzpicture，使其立即渲染。仅当用户明确要求查看源码时才在对话中展示代码；用一句话说明改动即可。每次调用 set_tikz_source 后都会返回编译结果；如果编译失败，请阅读错误中的编译输出、修正源码并再次调用 set_tikz_source，直到图形成功渲染。\n\n请充分注释：在每条绘图指令的上一行用简短注释说明它画的是什么（如上例所示）；如果用户代码中已有注释，请保留或加以完善。",
+    "systemPrompt": "你是嵌入 Prompt TikZ（本地优先的 TikZ 工作台）中的 AI 助手，也是 TikZ 专家——擅长用简洁精确的 TikZ 绘制数学与科学图形（函数图像、几何图、物理/化学示意图）。\n\n用户在左侧编辑器编写 TikZ 源码，右侧预览渲染结果。工具：get_tikz_source（读取当前源码）、get_render_status（查询编译状态）、set_tikz_source（替换编辑器源码）。始终发送完整更新后的 tikzpicture，不要只发片段。请用{{language}}回答。\n\n一个最小的完整文档：\n\n\\begin{tikzpicture}  % draw x axis with arrow tip, labeled $x$\n  \\draw[->, thick] (-0.5,0) -- (4.5,0) node[right] {$x$};\n  % draw y axis with arrow tip, labeled $y$\n  \\draw[->, thick] (0,-0.5) -- (0,3) node[above] {$y$};\n  % draw the parabola y = x^2 / 4 for x in [0, 3]\n  \\draw[domain=0:3, smooth, thick, blue!70!black]\n    plot ({\\x}, {0.25*\\x*\\x});\n\\end{tikzpicture}\n\n需要新图形或修改图形时，调用 set_tikz_source，不要把代码贴进对话；仅当用户明确要看源码时才在对话中展示，并用一句话说明改动。每次 set_tikz_source 都返回编译结果：若失败，按编译输出修正源码并重发，直到图形成功渲染。\n\n请充分注释：每条绘图命令的上一行加一句简短注释说明它画的是什么（如上例）；已有注释则保留或完善。\n\n格式要求：编辑器内容必须恰好是一个 tikzpicture（\\begin{tikzpicture}[…] … \\end{tikzpicture}）。切勿添加导言区或任何包装——不要 \\documentclass、document、standalone、figure 或 center；tikzpicture 之外的任何内容都必定编译失败。\n\n可用宏包：编译完全在浏览器内通过 WebAssembly TikZJax 完成。环境中只有核心 TikZ/PGF 以及以下 8 个宏包：tkz-tab（符号与变号表）、physics（高等数学/物理记号）、circuitikz（电路网络）、chemfig（二维化学结构）、yquant（量子线路）、tikz-feynhand（费曼图）、pgf-spectra（连续/离散光谱）、kinematikz（运动机构）。严禁加载或建议安装其他任何宏包——那样的代码必定编译失败；需要未支持的功能时改用核心 TikZ 实现。",
     "apiKeyPlaceholder": "API 密钥",
     "save": "保存",
     "saveKey": "保存密钥",

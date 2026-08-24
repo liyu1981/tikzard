@@ -17,6 +17,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { buildAgent } from "@/lib/agent/agent";
+import {
+  ensureContextCapacity,
+  parseContextOverflow,
+  storeObservedContextLimit,
+} from "@/lib/agent/context";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
 import {
   LOCAL_PROVIDER_ID,
@@ -36,6 +41,7 @@ import {
   type CompileLogEntry,
   compileLogsAtom,
   getLastCompileLogId,
+  pushCompileLog,
 } from "@/lib/compile-logs";
 import { leftTabAtom } from "@/lib/workbench-state";
 import {
@@ -278,6 +284,45 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
    * AUTO_FIX_MAX_ATTEMPTS consecutive retries; a successful compile or a
    * manual user message resets the counter.
    */
+  /**
+   * Run a prompt with context-window management: before sending, compact the
+   * transcript when it crosses COMPACT_THRESHOLD of the model's effective
+   * window; if the provider still rejects with an overflow error, learn the
+   * reported hard limit, compact against it, and retry once.
+   */
+  const promptGuarded = useCallback(
+    async (instance: Agent, text: string) => {
+      await ensureContextCapacity(instance, (notice) =>
+        pushCompileLog("info", notice),
+      );
+      try {
+        await instance.prompt(text);
+        return;
+      } catch (err) {
+        const raw = err instanceof Error ? err.message : String(err);
+        const overflow = parseContextOverflow(raw);
+        if (overflow === null || !overflow.overflow) {
+          throw err;
+        }
+        if (overflow.limit !== undefined) {
+          storeObservedContextLimit(
+            instance.state.model.provider,
+            instance.state.model.id,
+            overflow.limit,
+          );
+        }
+        pushCompileLog("error", t("agent.contextOverflowRetry"));
+        await ensureContextCapacity(instance, (notice) =>
+          pushCompileLog("info", notice),
+        );
+        // Retry on the compacted transcript; instance.prompt() appends the
+        // original user text itself.
+        await instance.prompt(text);
+      }
+    },
+    [t],
+  );
+
   const sendAutoFix = useCallback(
     async (entry: CompileLogEntry) => {
       if (streamingRef.current) {
@@ -305,7 +350,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       setStreaming(true);
       setRunError(null);
       try {
-        await instance.prompt(message);
+        await promptGuarded(instance, message);
         await persistSession(sessionNow, instance.state.messages);
       } catch (err) {
         setRunError(err instanceof Error ? err.message : String(err));
@@ -313,7 +358,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
         setStreaming(false);
       }
     },
-    [buildSystemPrompt, persistSession, t],
+    [buildSystemPrompt, persistSession, promptGuarded, t],
   );
 
   const subscribeAgent = useCallback(
@@ -559,7 +604,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     setStreaming(true);
     setRunError(null);
     try {
-      await instance.prompt(text);
+      await promptGuarded(instance, text);
       if (sessionNow.title === t("agent.untitled")) {
         const title = text.slice(0, 40) + (text.length > 40 ? "…" : "");
         await persistSession({ ...sessionNow, title }, instance.state.messages);
@@ -573,6 +618,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     createNewSession,
     input,
     persistSession,
+    promptGuarded,
     streaming,
     t,
   ]);
