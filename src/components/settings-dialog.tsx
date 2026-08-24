@@ -9,6 +9,7 @@ import {
   CheckIcon,
   GlobeIcon,
   InfoIcon,
+  PackageIcon,
   SettingsIcon,
   SparklesIcon,
   XIcon,
@@ -18,9 +19,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getMaxVersions, setMaxVersions } from "@/lib/versions";
 import pkg from "../../package.json";
 
-type SettingsTab = "ai" | "setup" | "language" | "about";
+type SettingsTab = "ai" | "setup" | "language" | "storage" | "about";
 
 const LANGUAGES = [
   { code: "en", native: "English" },
@@ -58,6 +60,47 @@ function LanguageSettings() {
       <p className="text-xs text-muted-foreground">
         {t("settings.languageHint")}
       </p>
+    </div>
+  );
+}
+
+function StorageSettings() {
+  const { t } = useTranslation();
+  const [value, setValue] = useState(String(getMaxVersions()));
+
+  const commit = (raw: string) => {
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+    const clamped = Math.max(1, Math.min(999, parsed));
+    setValue(String(clamped));
+    setMaxVersions(clamped);
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        {t("settings.maxVersionsLabel")}
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          max={999}
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            commit(event.target.value);
+          }}
+          onBlur={(event) => commit(event.target.value)}
+          aria-label={t("settings.maxVersionsLabel")}
+          className="h-8 w-24 rounded-lg border border-border/50 bg-background/50 px-2 font-mono text-sm text-foreground tabular-nums outline-none transition duration-150 hover:brightness-[1.06] focus-visible:border-ring"
+        />
+        <span className="text-xs text-muted-foreground">
+          {t("settings.maxVersionsHint")}
+        </span>
+      </div>
     </div>
   );
 }
@@ -137,6 +180,7 @@ export function SettingsDialog() {
     { id: "ai", labelKey: "settings.tabAI", Icon: BotIcon },
     { id: "setup", labelKey: "settings.tabAgentSetup", Icon: SparklesIcon },
     { id: "language", labelKey: "settings.tabLanguage", Icon: GlobeIcon },
+    { id: "storage", labelKey: "settings.tabStorage", Icon: PackageIcon },
     { id: "about", labelKey: "settings.tabAbout", Icon: InfoIcon },
   ];
 
@@ -224,6 +268,11 @@ export function SettingsDialog() {
                   {tab === "language" && (
                     <div role="tabpanel" aria-label={t("settings.tabLanguage")}>
                       <LanguageSettings />
+                    </div>
+                  )}
+                  {tab === "storage" && (
+                    <div role="tabpanel" aria-label={t("settings.tabStorage")}>
+                      <StorageSettings />
                     </div>
                   )}
                   {tab === "about" && (

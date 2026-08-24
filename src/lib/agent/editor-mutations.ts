@@ -17,6 +17,12 @@ export interface EditorMutationBridge {
   setCode: (code: string) => void;
   getRenderStatus: () => RenderStatusSnapshot;
   /**
+   * Persist the current editor source as a new version snapshot for the open
+   * document, tagged as saved by the agent. Resolves with the created version
+   * number, or rejects when no document is open.
+   */
+  saveVersion: (note?: string) => Promise<number>;
+  /**
    * Resolves once a compile triggered after this call reaches a terminal
    * state ("done" | "timeout" | "loadError"), or on timeout — whichever
    * comes first. Lets write tools report the real compile outcome.

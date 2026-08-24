@@ -5,6 +5,7 @@ import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentChat } from "@/components/agent/agent-chat";
+import { CheckIcon, HistoryIcon } from "@/components/agent/icons";
 import { CompileLogs } from "@/components/compile-logs";
 import { TikzEditor } from "@/components/tikz-editor";
 import {
@@ -15,6 +16,12 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { VersionBrowser } from "@/components/version-browser";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
 import {
   beginCompileLog,
@@ -36,6 +43,7 @@ import {
 } from "@/lib/image-export";
 import { canvasToSinglePagePdfBlob } from "@/lib/pdf-export";
 import { ensureTikzJax } from "@/lib/tikzjax";
+import { saveNewVersion, type TikzVersion } from "@/lib/versions";
 import {
   codeAtom,
   currentDocIdAtom,
@@ -176,7 +184,6 @@ export function TikzWorkbench() {
   const docTitle = useAtomValue(docTitleAtom);
   const currentDocId = useAtomValue(currentDocIdAtom);
   const setCurrentDocId = useSetAtom(currentDocIdAtom);
-  const setDocTitle = useSetAtom(docTitleAtom);
   const leftTab = useAtomValue(leftTabAtom);
   const setLeftTab = useSetAtom(leftTabAtom);
   const [status, setStatus] = useState<Status>("booting");
@@ -184,6 +191,8 @@ export function TikzWorkbench() {
   const [zoom, setZoom] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [thumbnail, setThumbnail] = useState<Blob | null>(null);
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [savingVersion, setSavingVersion] = useState(false);
   const [doneInfo, setDoneInfo] = useState<{ at: number; ms: number } | null>(
     null,
   );
@@ -356,6 +365,52 @@ export function TikzWorkbench() {
     [setCode],
   );
 
+  // Resolve the document id for a version save, minting one for a fresh
+  // (unsaved) document exactly like the autosave effect does so a snapshot
+  // can be taken before the debounced save has run.
+  const ensureDocId = useCallback((): string => {
+    if (currentDocId !== null) {
+      return currentDocId;
+    }
+    const id = crypto.randomUUID();
+    setCurrentDocId(id);
+    setLastOpenedDocId(id);
+    return id;
+  }, [currentDocId, setCurrentDocId]);
+
+  const handleSaveVersion = useCallback(async (): Promise<number> => {
+    const id = ensureDocId();
+    const version = await saveNewVersion(id, codeRef.current, "manual");
+    pushCompileLog(
+      "info",
+      tRef.current("workbench.versionSaved", { number: version.number }),
+    );
+    return version.number;
+  }, [ensureDocId]);
+
+  // Restoring a snapshot first checkpoints the current editor source (so the
+  // work being replaced is never lost), then swaps the source atom.
+  const handleRestoreVersion = useCallback(
+    async (version: TikzVersion) => {
+      const id = ensureDocId();
+      if (codeRef.current !== version.code) {
+        const checkpoint = await saveNewVersion(id, codeRef.current, "manual");
+        pushCompileLog(
+          "info",
+          tRef.current("workbench.versionSaved", {
+            number: checkpoint.number,
+          }),
+        );
+      }
+      setCode(version.code);
+      pushCompileLog(
+        "info",
+        tRef.current("workbench.versionRestored", { number: version.number }),
+      );
+    },
+    [ensureDocId, setCode],
+  );
+
   const agentBridge = useMemo<EditorMutationBridge>(() => {
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => window.setTimeout(resolve, ms));
@@ -366,6 +421,17 @@ export function TikzWorkbench() {
         status: statusRef.current,
         durationMs: doneInfoMsRef.current,
       }),
+      saveVersion: async (note) => {
+        const id = ensureDocId();
+        const version = await saveNewVersion(id, codeRef.current, "agent", {
+          note,
+        });
+        pushCompileLog(
+          "info",
+          tRef.current("workbench.versionSaved", { number: version.number }),
+        );
+        return version.number;
+      },
       waitForRender: async (timeoutMs = 50000) => {
         const deadline = performance.now() + timeoutMs;
         const startSeq = renderSeqRef.current;
@@ -402,7 +468,7 @@ export function TikzWorkbench() {
         };
       },
     };
-  }, [applyAgentCode]);
+  }, [applyAgentCode, ensureDocId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -643,6 +709,24 @@ export function TikzWorkbench() {
               </button>
             ))}
           </div>
+          {/* Version history is document-scoped, so it lives on the panel
+              chrome rather than inside the source editor's action row. */}
+          <div className="flex items-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setVersionsOpen(true)}
+                  aria-label={t("workbench.history")}
+                  title={t("workbench.history")}
+                  className="glass-control !border-border/60 flex size-7 items-center justify-center rounded-full bg-clip-padding p-1.5 text-muted-foreground transition duration-150 hover:-translate-y-px hover:brightness-[1.06] hover:text-foreground active:scale-[0.98]"
+                >
+                  <HistoryIcon className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{t("workbench.history")}</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
         {/* Both panes stay mounted; tabs only toggle visibility, so the
             assistant keeps its session list, expanded chats, and live agent
@@ -659,6 +743,25 @@ export function TikzWorkbench() {
               >
                 {t("workbench.render")}
               </button>
+              <button
+                type="button"
+                disabled={savingVersion}
+                onClick={() => {
+                  setSavingVersion(true);
+                  void handleSaveVersion().finally(() =>
+                    setSavingVersion(false),
+                  );
+                }}
+                title={t("workbench.saveVersion")}
+                className="glass-control !border-border/60 inline-flex items-center gap-1 rounded-lg bg-clip-padding px-3 py-1.5 text-sm font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {savingVersion ? (
+                  <span className="inline-block size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : (
+                  <CheckIcon className="size-3.5" />
+                )}
+                {t("workbench.saveVersion")}
+              </button>
             </div>
             <p className="hidden truncate text-xs text-muted-foreground sm:block">
               {t("workbench.hint")}
@@ -669,6 +772,11 @@ export function TikzWorkbench() {
           <AgentChat bridge={agentBridge} className="h-full" />
         </div>
       </div>
+      <VersionBrowser
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        onRestore={handleRestoreVersion}
+      />
       <div className="glass-control flex min-h-0 flex-col gap-2 rounded-xl bg-clip-padding p-4">
         <div className="flex h-8 shrink-0 items-center justify-between">
           <div

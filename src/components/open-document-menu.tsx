@@ -4,7 +4,7 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TrashIcon } from "@/components/agent/icons";
+import { PackageIcon, TrashIcon } from "@/components/agent/icons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,8 @@ import {
   setLastOpenedDocId,
   type TikzDocumentMeta,
 } from "@/lib/documents";
+import { exportDocumentById } from "@/lib/project-export";
+import { deleteVersions } from "@/lib/versions";
 import {
   codeAtom,
   currentDocIdAtom,
@@ -238,11 +240,20 @@ export function OpenDocumentMenu() {
 
   async function handleDelete(id: string) {
     await deleteDocument(id);
+    await deleteVersions(id).catch(() => undefined);
     setDocs((prev) => prev.filter((doc) => doc.id !== id));
     // Deleting the currently-open document also clears the last-opened
     // pointer so the next boot lands on the welcome page.
     if (id === currentDocId) {
       setLastOpenedDocId(null);
+    }
+  }
+
+  async function handleExport(id: string) {
+    try {
+      await exportDocumentById(id);
+    } catch {
+      // A stale card (document already gone) simply does nothing.
     }
   }
 
@@ -320,15 +331,26 @@ export function OpenDocumentMenu() {
                     </span>
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(doc.id)}
-                  aria-label={t("documents.delete")}
-                  title={t("documents.delete")}
-                  className="absolute right-1 top-1 rounded-md bg-background/80 p-1 text-muted-foreground opacity-0 shadow-sm backdrop-blur-sm transition duration-150 hover:bg-foreground/[0.06] hover:text-red-500 focus-visible:opacity-100 group-hover:opacity-100 active:scale-[0.95]"
-                >
-                  <TrashIcon className="size-3" />
-                </button>
+                <div className="absolute right-1 top-1 flex items-center gap-0.5 opacity-0 transition duration-150 focus-within:opacity-100 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => void handleExport(doc.id)}
+                    aria-label={t("documents.exportProject")}
+                    title={t("documents.exportProject")}
+                    className="rounded-md bg-background/80 p-1 text-muted-foreground shadow-sm backdrop-blur-sm transition duration-150 hover:bg-foreground/[0.06] hover:text-foreground active:scale-[0.95]"
+                  >
+                    <PackageIcon className="size-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(doc.id)}
+                    aria-label={t("documents.delete")}
+                    title={t("documents.delete")}
+                    className="rounded-md bg-background/80 p-1 text-muted-foreground shadow-sm backdrop-blur-sm transition duration-150 hover:bg-foreground/[0.06] hover:text-red-500 active:scale-[0.95]"
+                  >
+                    <TrashIcon className="size-3" />
+                  </button>
+                </div>
               </div>
             );
           })}

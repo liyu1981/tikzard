@@ -157,6 +157,14 @@ body {
     inset 0 1px 0 rgb(255 255 255 / 0.14);
 }
 
+/* Dropdown menus are near-opaque in dark mode so their (near-white) text
+   stays readable even when anchored over bright content — e.g. the white
+   preview canvas behind the workbench's export menu. A fully transparent
+   frosted surface would pick up the canvas and wash the label out. */
+.dark .glass-control[data-slot="dropdown-menu-content"] {
+  background: color-mix(in oklch, var(--background) 92%, transparent);
+}
+
 /* Dialog-grade glass: same material family as .glass-control but far less
    translucent, so overlaid content never bleeds through the card. */
 .glass-dialog {

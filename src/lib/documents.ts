@@ -22,13 +22,14 @@ export interface TikzDocumentMeta {
   thumbnail?: Blob;
 }
 
-const DB_NAME = "tikzard";
-const DB_VERSION = 1;
-const STORE_NAME = "documents";
+export const DB_NAME = "tikzard";
+const DB_VERSION = 2;
+export const DOCUMENTS_STORE_NAME = "documents";
+export const VERSIONS_STORE_NAME = "versions";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-function openDb(): Promise<IDBDatabase> {
+export function openDb(): Promise<IDBDatabase> {
   if (dbPromise !== null) {
     return dbPromise;
   }
@@ -36,9 +37,14 @@ function openDb(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(DOCUMENTS_STORE_NAME)) {
+        const store = db.createObjectStore(DOCUMENTS_STORE_NAME, {
+          keyPath: "id",
+        });
         store.createIndex("updatedAt", "updatedAt");
+      }
+      if (!db.objectStoreNames.contains(VERSIONS_STORE_NAME)) {
+        db.createObjectStore(VERSIONS_STORE_NAME, { keyPath: "docId" });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -47,15 +53,16 @@ function openDb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-function withStore<T>(
+export function withStore<T>(
+  storeName: string,
   mode: IDBTransactionMode,
   run: (store: IDBObjectStore) => IDBRequest<T> | IDBRequest<T>[],
 ): Promise<T> {
   return openDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, mode);
-        const store = transaction.objectStore(STORE_NAME);
+        const transaction = db.transaction(storeName, mode);
+        const store = transaction.objectStore(storeName);
         const request = run(store);
         const requests = Array.isArray(request) ? request : [request];
         let remaining = requests.length;
@@ -76,18 +83,22 @@ function withStore<T>(
 }
 
 export function saveDocument(document: TikzDocument): Promise<void> {
-  return withStore("readwrite", (store) => {
+  return withStore(DOCUMENTS_STORE_NAME, "readwrite", (store) => {
     store.put(document);
     return store.get(document.id);
   }).then(() => undefined);
 }
 
 export function listDocuments(): Promise<TikzDocumentMeta[]> {
-  return withStore<TikzDocumentMeta[]>("readonly", (store) => {
-    const index = store.index("updatedAt");
-    const request = index.getAll();
-    return request;
-  }).then((docs) =>
+  return withStore<TikzDocumentMeta[]>(
+    DOCUMENTS_STORE_NAME,
+    "readonly",
+    (store) => {
+      const index = store.index("updatedAt");
+      const request = index.getAll();
+      return request;
+    },
+  ).then((docs) =>
     docs
       .map((doc) => ({
         id: doc.id,
@@ -100,13 +111,15 @@ export function listDocuments(): Promise<TikzDocumentMeta[]> {
 }
 
 export function loadDocument(id: string): Promise<TikzDocument | undefined> {
-  return withStore<TikzDocument | undefined>("readonly", (store) =>
-    store.get(id),
+  return withStore<TikzDocument | undefined>(
+    DOCUMENTS_STORE_NAME,
+    "readonly",
+    (store) => store.get(id),
   );
 }
 
 export function deleteDocument(id: string): Promise<void> {
-  return withStore("readwrite", (store) => {
+  return withStore(DOCUMENTS_STORE_NAME, "readwrite", (store) => {
     store.delete(id);
     return store.get(id);
   }).then(() => undefined);

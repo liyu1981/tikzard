@@ -92,5 +92,30 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
     },
   });
 
-  return [getSource, getRenderStatus, setSource] as unknown as AgentTool[];
+  const saveVersion = tool({
+    name: "save_tikz_version",
+    label: "Save a version snapshot",
+    description:
+      "Persist the current TikZ source as a new version snapshot of the open document (its version number increments). Call this BEFORE set_tikz_source to checkpoint the user's current drawing before you change it — unless you are fixing a compilation bug, in which case do NOT create a snapshot of a broken state. Optionally pass a short note describing the snapshot (e.g. the change you are about to make).",
+    parameters: Type.Object({
+      note: Type.Optional(
+        Type.String({
+          description:
+            "Short description of this snapshot, e.g. what the user is drawing before your change.",
+        }),
+      ),
+    }),
+    execute: async (_id, args) => {
+      const ed = requireBridge(bridge);
+      const number = await ed.saveVersion(args.note);
+      return textBlocks(`Saved version v${number} of the current source.`);
+    },
+  });
+
+  return [
+    getSource,
+    getRenderStatus,
+    setSource,
+    saveVersion,
+  ] as unknown as AgentTool[];
 }
