@@ -26,7 +26,7 @@
 - All user-facing strings go through `t("key")`; every key must exist in BOTH `src/i18n/locales/en.json` and `src/i18n/locales/zh.json`.
 - Conventional-commit titles + detailed body; fix commits include cause + fix. Never commit unless asked; "generate git msg" prints a message, never commits.
 - Never commit secrets. The mkcert dev cert (`mkcert/localhost+3*.pem`) is the only private key allowed in the repo; keep the mkcert CA out. It covers `localhost`, `127.0.0.1`, `::1`, and the LAN IP; regenerate with mkcert when the LAN IP changes, and keep `allowedDevOrigins` in next.config.ts in sync (`192.168.0.*` covers the whole subnet; HMR WebSocket is blocked otherwise).
-- `@rod2ik/tikzjax` runtime assets are vendored into gitignored `public/tikzjax` by the `postinstall` script; never reference a CDN for them.
+- `@rod2ik/tikzjax` runtime assets are vendored into gitignored `public/tikzjax` by both the `postinstall` script and the `build` command (install-time lifecycle hooks are skipped on cached CI installs, so the build must regenerate them itself); never reference a CDN for them.
 
 <!-- taolu-enforce:apple-design -->
 - Follow the taolu apple-design (v1) in .opencode/skills/apple-design/SKILL.md

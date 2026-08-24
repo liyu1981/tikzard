@@ -11,7 +11,7 @@
     "dev": "next dev --webpack -p 3111 --experimental-https --experimental-https-key ./mkcert/localhost+3-key.pem --experimental-https-cert ./mkcert/localhost+3.pem",
     "dev:serve": "bash scripts/dev-serve.sh",
     "dev:stop": "bash scripts/dev-stop.sh",
-    "build": "next build --webpack",
+    "build": "bash scripts/copy-tikzjax.sh && next build --webpack",
     "start": "next start -p 4000",
     "lint": "biome check .",
     "format": "biome format --write .",
