@@ -112,8 +112,28 @@ export function deleteDocument(id: string): Promise<void> {
   }).then(() => undefined);
 }
 
-export function loadMostRecentDocument(): Promise<TikzDocument | undefined> {
-  return listDocuments().then((docs) =>
-    docs.length > 0 ? loadDocument(docs[0].id) : undefined,
-  );
+/**
+ * Which document was last opened (localStorage pointer). Documents always
+ * stay in the store; only the pointer is cleared when one is closed, which
+ * is what makes the app boot back to the welcome page.
+ */
+const LAST_OPENED_KEY = "tikzard-last-opened";
+
+export function getLastOpenedDocId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const id = window.localStorage.getItem(LAST_OPENED_KEY);
+  return id !== null && id !== "" ? id : null;
+}
+
+export function setLastOpenedDocId(id: string | null): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (id === null) {
+    window.localStorage.removeItem(LAST_OPENED_KEY);
+  } else {
+    window.localStorage.setItem(LAST_OPENED_KEY, id);
+  }
 }

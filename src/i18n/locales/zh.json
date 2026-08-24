@@ -28,7 +28,8 @@
     "editedAgo": "{{time}} 前编辑",
     "delete": "删除文档",
     "untitled": "未命名",
-    "titleField": "文档标题"
+    "titleField": "文档标题",
+    "close": "关闭文档"
   },
   "workbench": {
     "editorLabel": "TikZ 源码",
@@ -131,6 +132,7 @@
     "f2Title": "AI 助手",
     "f2Desc": "在对话中描述想要的图形，智能体会编写 TikZ、编译并修复错误，直到成功渲染。",
     "f3Title": "私密离线",
-    "f3Desc": "文档与会话只保存在本设备上；自带密钥，无服务器、无账户。"
+    "f3Desc": "文档与会话只保存在本设备上；自带密钥，无服务器、无账户。",
+    "backToStart": "返回欢迎页"
   }
 }

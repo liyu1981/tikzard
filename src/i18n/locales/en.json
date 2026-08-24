@@ -28,7 +28,8 @@
     "editedAgo": "Edited {{time}} ago",
     "delete": "Delete document",
     "untitled": "Untitled",
-    "titleField": "Document title"
+    "titleField": "Document title",
+    "close": "Close document"
   },
   "workbench": {
     "editorLabel": "TikZ Source",
@@ -131,6 +132,7 @@
     "f2Title": "AI assistant",
     "f2Desc": "Describe the drawing in chat; the agent writes the TikZ, compiles it, and fixes errors until it renders.",
     "f3Title": "Private & offline",
-    "f3Desc": "Documents and chat sessions live only on this device. Bring your own keys; no server, no account."
+    "f3Desc": "Documents and chat sessions live only on this device. Bring your own keys; no server, no account.",
+    "backToStart": "Back to start"
   }
 }

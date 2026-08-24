@@ -2,64 +2,113 @@
 
 import { useAtomValue, useSetAtom } from "jotai";
 import type * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { XIcon } from "@/components/agent/icons";
 import { EditableTitle } from "@/components/editable-title";
 import { OpenDocumentMenu } from "@/components/open-document-menu";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { TikzWorkbench } from "@/components/tikz-workbench";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { WelcomePage } from "@/components/welcome-page";
-import { listDocuments } from "@/lib/documents";
-import { currentDocIdAtom, entryGateAtom } from "@/lib/workbench-state";
+import {
+  getLastOpenedDocId,
+  loadDocument,
+  setLastOpenedDocId,
+} from "@/lib/documents";
+import {
+  codeAtom,
+  currentDocIdAtom,
+  docTitleAtom,
+  entryGateAtom,
+} from "@/lib/workbench-state";
 
 export default function Home() {
+  const { t } = useTranslation();
   const entryGate = useAtomValue(entryGateAtom);
   const setEntryGate = useSetAtom(entryGateAtom);
-  const currentDocId = useAtomValue(currentDocIdAtom);
-  const [checkKey, setCheckKey] = useState(0);
+  const setCode = useSetAtom(codeAtom);
+  const setDocTitle = useSetAtom(docTitleAtom);
+  const setCurrentDocId = useSetAtom(currentDocIdAtom);
 
-  // Decide the landing view from the document store exactly once per
-  // mount: zero stored documents -> welcome page, otherwise workbench.
-  // Storage failures fall through to the workbench so the app stays usable.
-  // Re-checked whenever documents change (e.g. the last one was deleted):
-  // an in-progress unsaved document (currentDocId set by the workbench)
-  // always keeps the workbench visible.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: checkKey is a deliberate re-trigger bumped when documents change on disk
+  // Leaving an open document: its latest state is already autosaved to
+  // IndexedDB, so closing clears the last-opened pointer and swaps back to
+  // the welcome page (the workbench remounts fresh when a document opens).
+  function closeDocument() {
+    setLastOpenedDocId(null);
+    setEntryGate("welcome");
+  }
+
+  // Landing view is decided by the last-opened pointer, not by store size:
+  // if one exists (and still resolves) we open it, otherwise we show the
+  // welcome page. A stale pointer is dropped so the app doesn't boot to a
+  // workbench for a deleted document. Storage failures fall through to the
+  // welcome page so the app stays usable.
   useEffect(() => {
     let cancelled = false;
-    void listDocuments()
-      .then((docs) => {
-        if (!cancelled) {
-          setEntryGate(
-            docs.length > 0 || currentDocId !== null ? "workbench" : "welcome",
-          );
+    const lastId = getLastOpenedDocId();
+    if (lastId === null) {
+      setEntryGate("welcome");
+      return () => {
+        cancelled = true;
+      };
+    }
+    void loadDocument(lastId)
+      .then((doc) => {
+        if (cancelled) {
+          return;
+        }
+        if (doc !== undefined) {
+          setCode(doc.code);
+          setDocTitle(doc.title);
+          setCurrentDocId(doc.id);
+          setEntryGate("workbench");
+        } else {
+          setLastOpenedDocId(null);
+          setEntryGate("welcome");
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setEntryGate("workbench");
+          setLastOpenedDocId(null);
+          setEntryGate("welcome");
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [setEntryGate, checkKey, currentDocId]);
+  }, [setCode, setCurrentDocId, setDocTitle, setEntryGate]);
 
-  // Documents can be removed from the header menu; listen for that so the
-  // empty-store state is picked up without a manual reload.
-  useEffect(() => {
-    const onDocsChanged = () => setCheckKey((key) => key + 1);
-    window.addEventListener("tikzard:docs-changed", onDocsChanged);
-    return () =>
-      window.removeEventListener("tikzard:docs-changed", onDocsChanged);
-  }, []);
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[1920px] flex-col px-6 pt-16">
       <header className="fixed inset-x-0 top-0 z-20">
         <div className="apple-panel">
           <div className="mx-auto flex h-12 max-w-[1920px] items-center gap-2 px-6">
             <OpenDocumentMenu />
-            <EditableTitle />
+            {/* The title is always mounted so the settings and theme buttons
+                stay pinned to the right; with no document open it is empty
+                and non-editable. The close button is document-scoped only. */}
+            <EditableTitle disabled={entryGate === "welcome"} />
+            {entryGate === "workbench" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={t("documents.close")}
+                    onClick={closeDocument}
+                    className="glass-control flex size-9 items-center justify-center rounded-full bg-clip-padding p-2 text-muted-foreground transition duration-150 hover:text-foreground active:scale-[0.95]"
+                  >
+                    <XIcon className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{t("documents.close")}</TooltipContent>
+              </Tooltip>
+            )}
             <div className="flex items-center gap-2">
               <SettingsDialog />
               <ThemeSwitcher />
@@ -76,7 +125,14 @@ export default function Home() {
         {entryGate === "welcome" && <WelcomePage />}
       </div>
       <footer className="flex h-12 shrink-0 items-center justify-center gap-1.5 text-xs text-muted-foreground">
-        <span className="text-carved font-medium tracking-wide">TikZard</span>
+        <button
+          type="button"
+          onClick={closeDocument}
+          title={t("welcome.backToStart")}
+          className="text-carved inline-flex items-center rounded-md px-1 py-0.5 font-medium tracking-wide transition-colors hover:text-foreground"
+        >
+          TikZard
+        </button>
         <span aria-hidden="true" className="text-border">
           ·
         </span>

@@ -25,7 +25,7 @@ import {
   pushCompileLog,
   setRenderFailureListener,
 } from "@/lib/compile-logs";
-import { loadMostRecentDocument, saveDocument } from "@/lib/documents";
+import { saveDocument, setLastOpenedDocId } from "@/lib/documents";
 import {
   canvasToPngBlob,
   downloadBlob,
@@ -424,29 +424,17 @@ export function TikzWorkbench() {
     };
   }, []);
 
-  // Hydrate the workbench with the most recently edited document from
-  // IndexedDB, or start with the example source and no document id.
+  // The page shell seeds the atoms (code/title/id) from the last-opened
+  // document before mounting this workbench, so there is nothing to hydrate
+  // here — only mark the store as ready so the autosave below can run.
   useEffect(() => {
-    let cancelled = false;
-    void loadMostRecentDocument().then((doc) => {
-      if (cancelled) {
-        return;
-      }
-      if (doc !== undefined) {
-        setCode(doc.code);
-        setDocTitle(doc.title);
-        setCurrentDocId(doc.id);
-      }
-      hydratedRef.current = true;
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [setCode, setCurrentDocId, setDocTitle]);
+    hydratedRef.current = true;
+  }, []);
 
   // Debounced autosave of the current document (code + title + latest
   // thumbnail) to IndexedDB. A null currentDocId mints a fresh id, which is
-  // how "New document" forks into its own record.
+  // how "New document" forks into its own record; that minted id also
+  // becomes the last-opened pointer.
   useEffect(() => {
     if (!hydratedRef.current) {
       return;
@@ -456,6 +444,7 @@ export function TikzWorkbench() {
       if (id === null) {
         id = crypto.randomUUID();
         setCurrentDocId(id);
+        setLastOpenedDocId(id);
       }
       void saveDocument({
         id,

@@ -14,9 +14,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   deleteDocument,
   listDocuments,
   loadDocument,
+  setLastOpenedDocId,
   type TikzDocumentMeta,
 } from "@/lib/documents";
 import {
@@ -172,6 +178,7 @@ export function OpenDocumentMenu() {
   const setEntryGate = useSetAtom(entryGateAtom);
   const [docs, setDocs] = useState<DocumentRow[]>([]);
   const [page, setPage] = useState(0);
+  const [open, setOpen] = useState(false);
   const thumbUrlsRef = useRef<string[]>([]);
 
   useEffect(
@@ -206,12 +213,13 @@ export function OpenDocumentMenu() {
   }
 
   // Start a fresh document: seed the starter source and clear the id so the
-  // workbench autosave mints a brand-new record on its next tick. Also
-  // dismiss the welcome page if it was showing.
+  // workbench autosave mints a brand-new record (and last-opened pointer)
+  // on its next tick. Also dismiss the welcome page if it was showing.
   function handleNew() {
     setCode(NEW_DOCUMENT_CODE);
     setDocTitle(t("documents.untitled"));
     setCurrentDocId(null);
+    setLastOpenedDocId(null);
     setEntryGate("workbench");
   }
 
@@ -223,13 +231,19 @@ export function OpenDocumentMenu() {
     setCode(doc.code);
     setDocTitle(doc.title);
     setCurrentDocId(doc.id);
+    setLastOpenedDocId(doc.id);
     setEntryGate("workbench");
+    setOpen(false);
   }
 
   async function handleDelete(id: string) {
     await deleteDocument(id);
     setDocs((prev) => prev.filter((doc) => doc.id !== id));
-    window.dispatchEvent(new Event("tikzard:docs-changed"));
+    // Deleting the currently-open document also clears the last-opened
+    // pointer so the next boot lands on the welcome page.
+    if (id === currentDocId) {
+      setLastOpenedDocId(null);
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(docs.length / PAGE_SIZE));
@@ -238,19 +252,26 @@ export function OpenDocumentMenu() {
 
   return (
     <DropdownMenu
-      onOpenChange={(open) => {
-        if (open) {
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
           setPage(0);
           void refresh();
         }
       }}
     >
-      <DropdownMenuTrigger
-        aria-label={t("documents.open")}
-        className="glass-control flex size-9 items-center justify-center rounded-full bg-clip-padding p-2 text-muted-foreground transition duration-150 hover:text-foreground active:scale-[0.95]"
-      >
-        <FolderOpenIcon />
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger
+            aria-label={t("documents.open")}
+            className="glass-control flex size-9 items-center justify-center rounded-full bg-clip-padding p-2 text-muted-foreground transition duration-150 hover:text-foreground active:scale-[0.95]"
+          >
+            <FolderOpenIcon />
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{t("documents.open")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="start" className="w-[20rem] p-1 text-xs">
         <div className="flex items-center justify-between gap-2 px-1 pb-1 pt-0.5">
           <DropdownMenuLabel className="p-0">
@@ -273,7 +294,7 @@ export function OpenDocumentMenu() {
             return (
               <div
                 key={doc.id}
-                className="group relative flex items-center gap-2 rounded-xl bg-white p-2 transition duration-150 hover:-translate-y-px active:scale-[0.99]"
+                className="group relative flex items-center gap-2 rounded-xl bg-foreground/[0.04] p-2 transition duration-150 hover:-translate-y-px hover:bg-foreground/[0.07] active:scale-[0.99]"
               >
                 <button
                   type="button"

@@ -9,6 +9,7 @@ import {
   PencilIcon,
   PlusIcon,
 } from "@/components/agent/icons";
+import { setLastOpenedDocId } from "@/lib/documents";
 import {
   codeAtom,
   currentDocIdAtom,
@@ -34,6 +35,7 @@ export function WelcomePage() {
     setCode(NEW_DOCUMENT_CODE);
     setDocTitle(t("documents.untitled"));
     setCurrentDocId(null);
+    setLastOpenedDocId(null);
     setEntryGate("workbench");
   }
 
