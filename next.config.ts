@@ -12,6 +12,12 @@ const nextConfig: NextConfig = {
       test: /[\\/]pi-ai[\\/]dist[\\/]auth[\\/]oauth[\\/]load\.js$/,
       parser: { javascript: { importDynamic: false } },
     });
+    // Bundled agent skills are authored as SKILL.md files and imported as
+    // raw strings at build time (offline-first: no runtime fetch).
+    config.module.rules.push({
+      test: /\.md$/,
+      type: "asset/source",
+    });
     return config;
   },
 };

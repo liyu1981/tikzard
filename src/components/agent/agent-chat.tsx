@@ -12,8 +12,11 @@ import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { buildAgent } from "@/lib/agent/agent";
@@ -29,6 +32,12 @@ import {
   refreshModels,
   resolveModel,
 } from "@/lib/agent/models";
+import {
+  formatSkillPayload,
+  formatSkillsForSystemPrompt,
+  getBundledSkills,
+  getSkillByName,
+} from "@/lib/agent/skills";
 import {
   type AgentSession,
   deleteSession,
@@ -306,15 +315,24 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
   }, [patchLatest]);
 
   const buildSystemPrompt = useCallback((base: string): string => {
+    // Progressive disclosure: only skill names + descriptions live in the
+    // prompt; full instructions arrive on-demand via the load_skill tool.
+    const skillsBlock = formatSkillsForSystemPrompt(getBundledSkills());
     const source = bridgeRef.current?.getCode() ?? "";
     if (source.trim() === "") {
-      return base;
+      return skillsBlock === "" ? base : `${base}\n\n${skillsBlock}`;
     }
     const excerpt =
       source.length > MAX_PROMPT_SOURCE_CHARS
         ? `${source.slice(0, MAX_PROMPT_SOURCE_CHARS)}\n…[truncated — use get_tikz_source for the full text]`
         : source;
-    return `${base}\n\n## Current TikZ source open in the workbench\n\`\`\`latex\n${excerpt}\n\`\`\`\nWhen asked about the drawing, answer using this source. To edit it, use set_tikz_source with the complete updated document (it lands in the editor immediately after the user approves).`;
+    return [
+      base,
+      skillsBlock,
+      `## Current TikZ source open in the workbench\n\`\`\`latex\n${excerpt}\n\`\`\`\nWhen asked about the drawing, answer using this source. To edit it, use set_tikz_source with the complete updated document (it lands in the editor immediately after the user approves).`,
+    ]
+      .filter((part) => part !== "")
+      .join("\n\n");
   }, []);
 
   const defaultModel = useCallback(():
@@ -641,48 +659,70 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     void sendAutoFix(failure);
   }, [compileLogs, leftTab, sendAutoFix]);
 
+  /**
+   * Run one user turn end-to-end: lazily create the session, refresh the
+   * effective system prompt, stream the reply, and persist. `titleOverride`
+   * names the session on its first message when the raw text is not
+   * human-friendly (e.g. a manually invoked skill's payload).
+   */
+  const runUserTurn = useCallback(
+    async (text: string, titleOverride?: string) => {
+      let sessionNow = latestRef.current;
+      if (sessionNow === null) {
+        const created = await createNewSession();
+        if (created === null) {
+          return;
+        }
+        sessionNow = created;
+      }
+      const instance = agentRef.current;
+      if (instance === null) {
+        return;
+      }
+      latestRef.current = sessionNow;
+      instance.state.systemPrompt = buildSystemPrompt(sessionNow.systemPrompt);
+      autoFixChainRef.current = 0;
+      setStreaming(true);
+      setRunError(null);
+      try {
+        await promptGuarded(instance, text);
+        if (sessionNow.title === t("agent.untitled")) {
+          const title =
+            titleOverride ?? text.slice(0, 40) + (text.length > 40 ? "…" : "");
+          await persistSession(
+            { ...sessionNow, title },
+            instance.state.messages,
+          );
+        }
+      } catch (err) {
+        setStreaming(false);
+        setRunError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [buildSystemPrompt, createNewSession, persistSession, promptGuarded, t],
+  );
+
+  /** Manual skill invocation (pi's /skill:name): send the full skill
+      instructions as the user message so the agent follows them now. */
+  const invokeSkill = useCallback(
+    (name: string) => {
+      const skill = getSkillByName(name);
+      if (skill === undefined || streamingRef.current) {
+        return;
+      }
+      void runUserTurn(formatSkillPayload(skill), `/skill:${name}`);
+    },
+    [runUserTurn],
+  );
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (text === "" || streaming) {
       return;
     }
-    let sessionNow = latestRef.current;
-    if (sessionNow === null) {
-      const created = await createNewSession();
-      if (created === null) {
-        return;
-      }
-      sessionNow = created;
-    }
-    const instance = agentRef.current;
-    if (instance === null) {
-      return;
-    }
-    latestRef.current = sessionNow;
-    instance.state.systemPrompt = buildSystemPrompt(sessionNow.systemPrompt);
-    autoFixChainRef.current = 0;
     setInput("");
-    setStreaming(true);
-    setRunError(null);
-    try {
-      await promptGuarded(instance, text);
-      if (sessionNow.title === t("agent.untitled")) {
-        const title = text.slice(0, 40) + (text.length > 40 ? "…" : "");
-        await persistSession({ ...sessionNow, title }, instance.state.messages);
-      }
-    } catch (err) {
-      setStreaming(false);
-      setRunError(err instanceof Error ? err.message : String(err));
-    }
-  }, [
-    buildSystemPrompt,
-    createNewSession,
-    input,
-    persistSession,
-    promptGuarded,
-    streaming,
-    t,
-  ]);
+    await runUserTurn(text);
+  }, [input, runUserTurn, streaming]);
 
   const handleStop = useCallback(() => {
     agentRef.current?.abort();
@@ -924,15 +964,49 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
           <BotIcon className="size-4 text-foreground" />
           {t("agent.title")}
         </span>
-        <button
-          type="button"
-          onClick={() => void createNewSession()}
-          aria-label={t("agent.newChat")}
-          title={t("agent.newChat")}
-          className={iconBtnStrong}
-        >
-          <PlusIcon className="size-4" />
-        </button>
+        <div className="flex items-center gap-0.5">
+          {getBundledSkills().length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label={t("agent.skills")}
+                title={t("agent.skills")}
+                disabled={streaming}
+                className={iconBtnStrong}
+              >
+                <SparklesIcon className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="text-xs">
+                <DropdownMenuLabel>{t("agent.skills")}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {getBundledSkills().map((skill) => (
+                  <DropdownMenuItem
+                    key={skill.name}
+                    disabled={streaming}
+                    onSelect={() => invokeSkill(skill.name)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-medium">
+                        /skill:{skill.name}
+                      </span>
+                      <span className="block truncate text-muted-foreground">
+                        {skill.description}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <button
+            type="button"
+            onClick={() => void createNewSession()}
+            aria-label={t("agent.newChat")}
+            title={t("agent.newChat")}
+            className={iconBtnStrong}
+          >
+            <PlusIcon className="size-4" />
+          </button>
+        </div>
       </header>
 
       <div

@@ -11,6 +11,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type TSchema, Type } from "@earendil-works/pi-ai";
 import type { EditorMutationBridge } from "./editor-mutations";
+import { formatSkillPayload, getSkillByName } from "./skills";
 
 const MAX_SOURCE_CHARS = 20000;
 
@@ -112,10 +113,32 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
     },
   });
 
+  const loadSkill = tool({
+    name: "load_skill",
+    label: "Load skill",
+    description:
+      "Load the full instructions of a named skill (specialized drawing guides listed in the system prompt under <available_skills>). Call this BEFORE attempting a task that matches one of the skill descriptions, and follow the returned instructions.",
+    parameters: Type.Object({
+      name: Type.String({
+        description: "Skill name exactly as listed in <available_skills>.",
+      }),
+    }),
+    execute: async (_id, args) => {
+      const skill = getSkillByName(args.name.trim());
+      if (skill === undefined) {
+        throw new Error(
+          `Unknown skill "${args.name}". Call load_skill with one of the exact names listed in <available_skills>.`,
+        );
+      }
+      return textBlocks(formatSkillPayload(skill));
+    },
+  });
+
   return [
     getSource,
     getRenderStatus,
     setSource,
     saveVersion,
+    loadSkill,
   ] as unknown as AgentTool[];
 }
