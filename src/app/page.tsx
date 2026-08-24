@@ -29,14 +29,12 @@ export default function Home() {
         <TikzWorkbench />
       </div>
       <footer className="flex h-12 shrink-0 items-center justify-center gap-1.5 text-xs text-muted-foreground">
-        <span className="text-carved font-medium tracking-wide">
-          Prompt TikZ
-        </span>
+        <span className="text-carved font-medium tracking-wide">TikZard</span>
         <span aria-hidden="true" className="text-border">
           ·
         </span>
         <a
-          href="https://github.com/yli/prompt-tikz"
+          href="https://github.com/liyu1981/tikzard"
           target="_blank"
           rel="noreferrer"
           className="text-carved inline-flex items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:text-foreground"

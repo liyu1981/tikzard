@@ -17,7 +17,7 @@ export interface AgentSession {
 
 export type AgentSessionSummary = Omit<AgentSession, "messages">;
 
-const DB_NAME = "prompt-tikz-agent";
+const DB_NAME = "tikzard-agent";
 const DB_VERSION = 1;
 const STORE = "sessions";
 

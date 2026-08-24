@@ -2,7 +2,7 @@
 
 export type Theme = "light" | "dark" | "system";
 
-export const THEME_STORAGE_KEY = "prompt-tikz-theme";
+export const THEME_STORAGE_KEY = "tikzard-theme";
 
 export function getStoredTheme(): Theme {
   if (typeof window === "undefined") {

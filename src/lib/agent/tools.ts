@@ -1,5 +1,5 @@
 /**
- * Host-app agent tools for prompt-tikz. Each tool is a plain object with a
+ * Host-app agent tools for tikzard. Each tool is a plain object with a
  * TypeBox parameter schema; execute() returns text blocks or throws.
  *
  * Two tool classes:

@@ -6,11 +6,11 @@ import { I18nProvider } from "@/i18n/provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Prompt TikZ",
-  description: "Local-first TikZ prompt workbench",
+  title: "TikZard",
+  description: "Local-first TikZ workbench",
 };
 
-const themeInit = `(function(){try{var t=localStorage.getItem("prompt-tikz-theme")||"system";var d=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var el=document.documentElement;el.classList.toggle("dark",d);el.style.colorScheme=d?"dark":"light";}catch(e){}})();`;
+const themeInit = `(function(){try{var t=localStorage.getItem("tikzard-theme")||"system";var d=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var el=document.documentElement;el.classList.toggle("dark",d);el.style.colorScheme=d?"dark":"light";}catch(e){}})();`;
 
 export default function RootLayout({
   children,

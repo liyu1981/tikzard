@@ -22,7 +22,7 @@ export interface TikzDocumentMeta {
   thumbnail?: Blob;
 }
 
-const DB_NAME = "prompt-tikz";
+const DB_NAME = "tikzard";
 const DB_VERSION = 1;
 const STORE_NAME = "documents";
 

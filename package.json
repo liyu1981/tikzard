@@ -1,7 +1,11 @@
 {
-  "name": "prompt-tikz",
+  "name": "tikzard",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liyu1981/tikzard.git"
+  },
   "packageManager": "pnpm@11.23.0",
   "scripts": {
     "dev": "next dev --webpack -p 3111 --experimental-https --experimental-https-key ./mkcert/localhost+3-key.pem --experimental-https-cert ./mkcert/localhost+3.pem",
