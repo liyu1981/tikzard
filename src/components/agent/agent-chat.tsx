@@ -498,7 +498,9 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
         updatedAt: now,
         messages: [],
       };
-      await saveSession(next);
+      // Not persisted here: an untouched session would accumulate an empty
+      // "Untitled" row on every page load. The record materializes on first
+      // activity (message sent, or model/thinking changed) via persistSession.
       setSessions((prev) =>
         [...prev.filter((s) => s.id !== next.id), next].sort(
           (a, b) => a.updatedAt - b.updatedAt,
@@ -529,16 +531,12 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       const all = await listSessionsFull();
       all.sort((a, b) => a.updatedAt - b.updatedAt);
       if (all.length > 0) {
+        // Past conversations stay visible but collapsed and detached; a page
+        // load never resumes one, so the active transcript always starts empty.
         setSessions(all);
-        const newest = all[all.length - 1];
-        if (newest !== undefined) {
-          latestRef.current = newest;
-          setCollapsed(new Set(all.slice(0, -1).map((s) => s.id)));
-          await buildForSession(newest);
-        }
-      } else {
-        await createNewSession();
+        setCollapsed(new Set(all.map((s) => s.id)));
       }
+      await createNewSession();
     })();
     return () => {
       agentRef.current?.abort();
