@@ -77,6 +77,7 @@
     "noMessages": "No messages yet",
     "noModelsHint": "No models available. Configure and verify a provider in settings first.",
     "thinking": "Thinking…",
+    "reasoning": "Reasoning",
     "errorPrefix": "Error:",
     "send": "Send",
     "stop": "Stop",

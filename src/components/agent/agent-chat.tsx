@@ -184,6 +184,45 @@ function UserMessageBubble({ text }: { text: string }) {
   );
 }
 
+/** Collapsible reasoning panel: live (spinner) while streaming, archived after. */
+function ThinkingDisclosure({
+  text,
+  live = false,
+}: {
+  text: string;
+  live?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        className="flex items-center gap-1 rounded-lg border border-border/40 px-2 py-1 text-xs font-normal text-muted-foreground transition-colors hover:bg-foreground/[0.05]"
+      >
+        {live ? (
+          <LoaderIcon className="size-3 animate-spin" />
+        ) : (
+          <SparklesIcon className="size-3" />
+        )}
+        <span>{t("agent.reasoning")}</span>
+        <ChevronDownIcon
+          className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="mt-1 rounded-lg border border-border/40 bg-background/30 p-2">
+          <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words font-sans text-xs text-muted-foreground">
+            {text !== "" ? text : "…"}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AgentChat({ bridge, className }: AgentChatProps) {
   const { t, i18n } = useTranslation();
   const leftTab = useAtomValue(leftTabAtom);
@@ -193,6 +232,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [streamingThinking, setStreamingThinking] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [toolChips, setToolChips] = useState<ToolChip[]>([]);
   const [expandedToolCalls, setExpandedToolCalls] = useState<Set<string>>(
@@ -398,6 +438,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
           case "message_start":
             if (event.message.role === "assistant") {
               setStreamingText("");
+              setStreamingThinking("");
               setIsThinking(false);
             }
             syncTranscript();
@@ -406,6 +447,8 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
             const ev = event.assistantMessageEvent;
             if (ev.type === "text_delta") {
               setStreamingText((prev) => prev + ev.delta);
+            } else if (ev.type === "thinking_delta") {
+              setStreamingThinking((prev) => prev + ev.delta);
             } else if (ev.type === "thinking_start") {
               setIsThinking(true);
             } else if (ev.type === "thinking_end") {
@@ -451,6 +494,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
             syncTranscript();
             setStreaming(false);
             setStreamingText("");
+            setStreamingThinking("");
             setIsThinking(false);
             if (instance.state.errorMessage) {
               setRunError(instance.state.errorMessage);
@@ -535,6 +579,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
       await buildForSession(next);
       setStreaming(false);
       setStreamingText("");
+      setStreamingThinking("");
       setToolChips([]);
       setRunError(null);
       return next;
@@ -568,7 +613,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     if (el !== null) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [sessions, streamingText, toolChips]);
+  }, [sessions, streamingText, streamingThinking, toolChips]);
 
   // React to compile failures arriving in the shared log stream: only while
   // the assistant tab is open, and each failure entry is handled once.
@@ -658,6 +703,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
         latestRef.current = null;
         setStreaming(false);
         setStreamingText("");
+        setStreamingThinking("");
         setIsThinking(false);
         setToolChips([]);
         setRunError(null);
@@ -777,7 +823,11 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
     }
     const text = messageText(message);
     const calledTools = message.content.filter((b) => b.type === "toolCall");
-    if (text === "" && calledTools.length === 0) {
+    const thinkingText = message.content
+      .filter((b) => b.type === "thinking" && !b.redacted)
+      .map((b) => (b.type === "thinking" ? b.thinking : ""))
+      .join("\n\n");
+    if (text === "" && calledTools.length === 0 && thinkingText === "") {
       return null;
     }
 
@@ -796,6 +846,7 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
           <BotIcon className="size-3.5 text-foreground" />
         </div>
         <div className="min-w-0 max-w-[88%] space-y-1.5">
+          {thinkingText !== "" && <ThinkingDisclosure text={thinkingText} />}
           {text !== "" && (
             <div className="glass-control rounded-2xl bg-clip-padding px-3 py-2">
               <MarkdownView content={text} />
@@ -945,12 +996,16 @@ export function AgentChat({ bridge, className }: AgentChatProps) {
                   {s.messages.map((msg, i) =>
                     renderMessage(msg, i, s.messages),
                   )}
-                  {isActive && isThinking && streamingText === "" && (
-                    <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
-                      <LoaderIcon className="size-3 animate-spin" />
-                      {t("agent.thinking")}
-                    </div>
-                  )}
+                  {isActive &&
+                    (isThinking || streamingThinking !== "") &&
+                    streamingText === "" && (
+                      <div className="min-w-0 max-w-[88%]">
+                        <ThinkingDisclosure
+                          text={streamingThinking}
+                          live={isThinking}
+                        />
+                      </div>
+                    )}
                   {isActive && streamingText !== "" && (
                     <div className="flex items-start gap-2">
                       <div className="glass-control mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-clip-padding">
