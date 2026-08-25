@@ -1,5 +1,6 @@
 "use client";
 
+import type { ImageContent } from "@earendil-works/pi-ai";
 import { atom } from "jotai";
 
 export const EXAMPLE_CODE = String.raw`\begin{tikzpicture}
@@ -45,3 +46,17 @@ export const docTitleAtom = atom("Untitled");
 export const currentDocIdAtom = atom<string | null>(null);
 
 export const leftTabAtom = atom<LeftTab>("assistant");
+
+/**
+ * An annotated preview snapshot waiting to be staged in the AI assistant
+ * composer: the workbench produces the merged picture on "Finish", the chat
+ * consumes it (fills the input text and replaces attachments, never sends)
+ * and clears the atom.
+ */
+export interface PendingAnnotation {
+  id: string;
+  content: ImageContent;
+  promptText: string;
+}
+
+export const pendingAnnotationAtom = atom<PendingAnnotation | null>(null);

@@ -74,7 +74,28 @@
     "saved": "Saved",
     "versionSaved": "Saved version {{number}}",
     "history": "Version history",
-    "versionRestored": "Restored version {{number}}"
+    "versionRestored": "Restored version {{number}}",
+    "annotate": "Annotate",
+    "annotatePen": "Pen",
+    "annotateText": "Text",
+    "annotateRect": "Rectangle",
+    "annotateEllipse": "Ellipse",
+    "annotateArrow": "Arrow",
+    "annotateUndo": "Undo",
+    "annotateClear": "Clear all annotations",
+    "annotateFinish": "Finish",
+    "annotateCancel": "Cancel annotation",
+    "annotatePlaceholder": "Type text…",
+    "annotateAttached": "Annotated picture staged in the assistant composer",
+    "color": {
+      "red": "Red",
+      "orange": "Orange",
+      "green": "Green",
+      "blue": "Blue",
+      "purple": "Purple",
+      "pink": "Pink",
+      "black": "Black"
+    }
   },
   "agent": {
     "title": "AI Assistant",
@@ -97,6 +118,8 @@
     "chatPlaceholder": "Ask the assistant… (Enter to send, Shift+Enter for newline, Ctrl+Enter for a new chat)",
     "attachImage": "Attach images",
     "removeAttachment": "Remove attachment",
+    "annotatedImageName": "Annotated picture",
+    "annotatedPrompt": "First analyse what is instructed in the annotated picture, then modify our TikZ drawing accordingly.",
     "imageOnlyTitle": "(image)",
     "imageModelNoVision": "The selected model cannot see images — pick a vision-capable model first.",
     "imageTooMany": "At most {{count}} images per message.",

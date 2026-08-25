@@ -6,14 +6,14 @@ import type {
   ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import { useAtomValue } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import type {
   ChangeEvent,
   ClipboardEvent,
   DragEvent,
   KeyboardEvent,
 } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
@@ -65,7 +65,7 @@ import {
   getLastCompileLogId,
   pushCompileLog,
 } from "@/lib/compile-logs";
-import { leftTabAtom } from "@/lib/workbench-state";
+import { leftTabAtom, pendingAnnotationAtom } from "@/lib/workbench-state";
 import {
   BotIcon,
   CheckIcon,
@@ -296,10 +296,13 @@ function ThinkingDisclosure({
   );
 }
 
-export function AgentChat({ bridge, docId, className }: AgentChatProps) {
+function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
   const { t, i18n } = useTranslation();
   const leftTab = useAtomValue(leftTabAtom);
   const compileLogs = useAtomValue(compileLogsAtom);
+  const [pendingAnnotation, setPendingAnnotation] = useAtom(
+    pendingAnnotationAtom,
+  );
 
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -724,6 +727,23 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
       cancelled = true;
     };
   }, [docId]);
+
+  // Stage an annotated snapshot handed over by the preview's annotate flow:
+  // replace the draft text and attachments with it, but never auto-send.
+  useEffect(() => {
+    if (pendingAnnotation === null) {
+      return;
+    }
+    setInput(pendingAnnotation.promptText);
+    setAttachments([
+      {
+        id: pendingAnnotation.id,
+        name: t("agent.annotatedImageName"),
+        content: pendingAnnotation.content,
+      },
+    ]);
+    setPendingAnnotation(null);
+  }, [pendingAnnotation, setPendingAnnotation, t]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-scroll whenever transient streaming output grows
   useEffect(() => {
@@ -1632,3 +1652,10 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
     </div>
   );
 }
+
+/**
+ * Memoized so the workbench's 1 Hz "rendered Xs ago" ticker (which re-renders
+ * the whole panel) doesn't reconcile the composer and its file input every
+ * second. Internal state/atom subscriptions still update it normally.
+ */
+export const AgentChat = memo(AgentChatBase);

@@ -149,6 +149,12 @@ export async function fileToImageContent(file: File): Promise<ImageLoadResult> {
   }
 }
 
+/** Turn an in-memory blob (e.g. a composed annotated snapshot) into a
+    base64 ImageContent block for the composer. */
+export async function blobToImageContent(blob: Blob): Promise<ImageContent> {
+  return blobToContent(blob, "image/png");
+}
+
 /** True when the model catalog entry accepts image input. */
 export function supportsImageInput(model: {
   input?: readonly string[];

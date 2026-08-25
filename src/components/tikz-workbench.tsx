@@ -5,7 +5,8 @@ import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AgentChat } from "@/components/agent/agent-chat";
-import { CheckIcon, HistoryIcon } from "@/components/agent/icons";
+import { CheckIcon, HistoryIcon, PencilIcon } from "@/components/agent/icons";
+import { AnnotateLayer } from "@/components/annotate-overlay";
 import { CompileLogs } from "@/components/compile-logs";
 import { TikzEditor } from "@/components/tikz-editor";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { VersionBrowser } from "@/components/version-browser";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
+import { blobToImageContent } from "@/lib/agent/images";
 import {
   beginCompileLog,
   COMPILE_FAILURE_PATTERN,
@@ -35,6 +37,7 @@ import {
 import { saveDocument, setLastOpenedDocId } from "@/lib/documents";
 import {
   canvasToPngBlob,
+  composeAnnotatedBlob,
   downloadBlob,
   measureSvgNaturalSize,
   renderSvgToCanvas,
@@ -50,6 +53,7 @@ import {
   docTitleAtom,
   type LeftTab,
   leftTabAtom,
+  pendingAnnotationAtom,
 } from "@/lib/workbench-state";
 
 type Status =
@@ -189,6 +193,7 @@ export function TikzWorkbench() {
   const setCurrentDocId = useSetAtom(currentDocIdAtom);
   const leftTab = useAtomValue(leftTabAtom);
   const setLeftTab = useSetAtom(leftTabAtom);
+  const setPendingAnnotation = useSetAtom(pendingAnnotationAtom);
   const [status, setStatus] = useState<Status>("booting");
   const [rightTab, setRightTab] = useState<RightTab>("preview");
   const [zoom, setZoom] = useState(1);
@@ -204,8 +209,15 @@ export function TikzWorkbench() {
     null,
   );
   const [nowTick, setNowTick] = useState(() => Date.now());
+  /** Whether the annotation overlay is active on the preview picture. */
+  const [annotating, setAnnotating] = useState(false);
+  /** Preview panel host element the annotation overlay portals into. */
+  const [previewHostEl, setPreviewHostEl] = useState<HTMLDivElement | null>(
+    null,
+  );
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const annotationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastRenderedCodeRef = useRef<string | null>(null);
   const renderSeqRef = useRef(0);
   const renderStartRef = useRef(0);
@@ -275,6 +287,36 @@ export function TikzWorkbench() {
   const getPreviewSvg = useCallback(
     () => canvasRef.current?.querySelector("svg") ?? null,
     [],
+  );
+
+  // Finish annotation: composite the overlay onto the rendered SVG, downscale
+  // to a vision-friendly size, and stage it in the assistant composer with a
+  // preset instruction (never sent automatically). An empty canvas just closes.
+  const handleAnnotateFinish = useCallback(
+    (hasContent: boolean) => {
+      const svg = getPreviewSvg();
+      const overlay = annotationCanvasRef.current;
+      const host = previewHostEl;
+      setAnnotating(false);
+      if (!hasContent || !svg || !overlay || !host) {
+        return;
+      }
+      void composeAnnotatedBlob(svg, overlay, host, zoomRef.current)
+        .then(blobToImageContent)
+        .then((content) => {
+          setPendingAnnotation({
+            id: crypto.randomUUID(),
+            content,
+            promptText: tRef.current("agent.annotatedPrompt"),
+          });
+          setLeftTab("assistant");
+          pushCompileLog("info", tRef.current("workbench.annotateAttached"));
+        })
+        .catch(() =>
+          pushCompileLog("error", tRef.current("workbench.exportFailed")),
+        );
+    },
+    [getPreviewSvg, previewHostEl, setLeftTab, setPendingAnnotation],
   );
 
   const runExport = useCallback(
@@ -954,6 +996,21 @@ export function TikzWorkbench() {
                     <path d="M12 5v14M5 12h14" />
                   </svg>
                 </button>
+                <button
+                  type="button"
+                  aria-label={t("workbench.annotate")}
+                  title={t("workbench.annotate")}
+                  aria-pressed={annotating}
+                  disabled={status !== "done"}
+                  onClick={() => setAnnotating((prev) => !prev)}
+                  className={`rounded-full p-1.5 transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-40 ${
+                    annotating
+                      ? "bg-primary/15 text-primary"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <PencilIcon className="size-3.5" />
+                </button>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -1004,19 +1061,29 @@ export function TikzWorkbench() {
               : "hidden"
           }
         >
-          <div
-            ref={canvasRef}
-            className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-lg border border-black/10 bg-white p-4 shadow-inner"
-          >
+          <div ref={setPreviewHostEl} className="relative min-h-0 flex-1">
             <div
-              ref={stageRef}
-              style={{ zoom }}
-              className={
-                zoom > 1
-                  ? "[&_svg]:h-auto"
-                  : "[&_svg]:h-auto [&_svg]:max-w-full"
-              }
-            />
+              ref={canvasRef}
+              className="flex h-full items-center justify-center overflow-auto rounded-lg border border-black/10 bg-white p-4 shadow-inner"
+            >
+              <div
+                ref={stageRef}
+                style={{ zoom }}
+                className={
+                  zoom > 1
+                    ? "[&_svg]:h-auto"
+                    : "[&_svg]:h-auto [&_svg]:max-w-full"
+                }
+              />
+            </div>
+            {annotating && previewHostEl !== null && (
+              <AnnotateLayer
+                mount={previewHostEl}
+                canvasRef={annotationCanvasRef}
+                onFinish={handleAnnotateFinish}
+                onCancel={() => setAnnotating(false)}
+              />
+            )}
           </div>
           <div className="flex h-9 shrink-0 items-center justify-between gap-2 text-xs">
             <span className="inline-flex items-center gap-1.5 font-medium">

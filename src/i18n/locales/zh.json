@@ -74,7 +74,28 @@
     "saved": "已保存",
     "versionSaved": "已保存版本 {{number}}",
     "history": "版本历史",
-    "versionRestored": "已恢复版本 {{number}}"
+    "versionRestored": "已恢复版本 {{number}}",
+    "annotate": "标注",
+    "annotatePen": "画笔",
+    "annotateText": "文字",
+    "annotateRect": "矩形",
+    "annotateEllipse": "椭圆",
+    "annotateArrow": "箭头",
+    "annotateUndo": "撤销",
+    "annotateClear": "清除全部标注",
+    "annotateFinish": "完成",
+    "annotateCancel": "取消标注",
+    "annotatePlaceholder": "输入文字…",
+    "annotateAttached": "已将标注图片放入 AI 助手输入框",
+    "color": {
+      "red": "红色",
+      "orange": "橙色",
+      "green": "绿色",
+      "blue": "蓝色",
+      "purple": "紫色",
+      "pink": "粉色",
+      "black": "黑色"
+    }
   },
   "agent": {
     "title": "AI 助手",
@@ -97,6 +118,8 @@
     "chatPlaceholder": "向 AI 助手提问…（Enter 发送，Shift+Enter 换行，Ctrl+Enter 新对话发送）",
     "attachImage": "添加图片",
     "removeAttachment": "移除图片",
+    "annotatedImageName": "标注图片",
+    "annotatedPrompt": "请先分析标注图片中的修改意见，然后据此修改我们的 TikZ 图形。",
     "imageOnlyTitle": "（图片）",
     "imageModelNoVision": "当前模型不支持看图——请先选择支持视觉的模型。",
     "imageTooMany": "每条消息最多 {{count}} 张图片。",
