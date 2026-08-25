@@ -313,6 +313,9 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
   );
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
+  /** What pressing send (or Enter) does: continue the current thread or
+      open a fresh one for the message. Ctrl+Enter always forces "new". */
+  const [sendMode, setSendMode] = useState<"current" | "new">("current");
   const [runError, setRunError] = useState<string | null>(null);
 
   const agentRef = useRef<Agent | null>(null);
@@ -908,20 +911,41 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
     [addImageFiles],
   );
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    const images = attachments.map((a) => a.content);
-    if ((text === "" && images.length === 0) || streaming) {
-      return;
-    }
-    if (images.length > 0 && !imagesSupported) {
-      setRunError(t("agent.imageModelNoVision"));
-      return;
-    }
-    setInput("");
-    setAttachments([]);
-    await runUserTurn(text, undefined, images.length > 0 ? images : undefined);
-  }, [attachments, imagesSupported, input, runUserTurn, streaming, t]);
+  const handleSend = useCallback(
+    async (sendInNewChat = false) => {
+      const text = input.trim();
+      const images = attachments.map((a) => a.content);
+      if ((text === "" && images.length === 0) || streaming) {
+        return;
+      }
+      if (images.length > 0 && !imagesSupported) {
+        setRunError(t("agent.imageModelNoVision"));
+        return;
+      }
+      setInput("");
+      setAttachments([]);
+      if (sendInNewChat) {
+        const created = await createNewSession();
+        if (created === null) {
+          return;
+        }
+      }
+      await runUserTurn(
+        text,
+        undefined,
+        images.length > 0 ? images : undefined,
+      );
+    },
+    [
+      createNewSession,
+      attachments,
+      imagesSupported,
+      input,
+      runUserTurn,
+      streaming,
+      t,
+    ],
+  );
 
   const handleStop = useCallback(() => {
     agentRef.current?.abort();
@@ -1021,6 +1045,11 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
       return next;
     });
   }, []);
+
+  /** Send (and its mode chevron) is inert until there is something to send
+      and a provider to send it to. */
+  const sendDisabled =
+    (input.trim() === "" && attachments.length === 0) || allModels.length === 0;
 
   const iconBtn =
     "rounded-lg p-1.5 text-muted-foreground transition duration-150 hover:bg-foreground/[0.06] hover:text-foreground active:scale-[0.95]";
@@ -1469,12 +1498,34 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void handleSend();
+            void handleSend(sendMode === "new");
           }}
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleComposerDrop}
           className="flex items-stretch gap-1.5"
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            hidden
+            onChange={handleFileInputChange}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={streaming || !imagesSupported}
+            aria-label={t("agent.attachImage")}
+            title={
+              imagesSupported
+                ? t("agent.attachImage")
+                : t("agent.imageModelNoVision")
+            }
+            className="glass-control inline-flex w-10 shrink-0 items-center justify-center rounded-xl transition duration-150 hover:brightness-[1.06] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ImageIcon className="size-4" />
+          </button>
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             {attachments.length > 0 && (
               <div className="flex flex-wrap gap-1">
@@ -1504,9 +1555,17 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (event.key !== "Enter") {
+                  return;
+                }
+                if (event.ctrlKey || event.metaKey) {
+                  // Always "send and start a new conversation", regardless
+                  // of the send-button mode.
                   event.preventDefault();
-                  void handleSend();
+                  void handleSend(true);
+                } else if (!event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend(sendMode === "new");
                 }
               }}
               onPaste={handleComposerPaste}
@@ -1515,28 +1574,6 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
               className="min-h-10 w-full flex-1 resize-none rounded-xl border border-border/50 bg-background px-2.5 py-2 text-sm outline-none focus-visible:border-ring disabled:opacity-50"
             />
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            multiple
-            hidden
-            onChange={handleFileInputChange}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={streaming || !imagesSupported}
-            aria-label={t("agent.attachImage")}
-            title={
-              imagesSupported
-                ? t("agent.attachImage")
-                : t("agent.imageModelNoVision")
-            }
-            className="glass-control inline-flex w-10 shrink-0 items-center justify-center rounded-xl transition duration-150 hover:brightness-[1.06] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ImageIcon className="size-4" />
-          </button>
           {streaming ? (
             <button
               type="button"
@@ -1548,18 +1585,47 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
               <SquareIcon className="size-4" />
             </button>
           ) : (
-            <button
-              type="submit"
-              disabled={
-                (input.trim() === "" && attachments.length === 0) ||
-                allModels.length === 0
-              }
-              aria-label={t("agent.send")}
-              title={t("agent.send")}
-              className="inline-flex w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <SendIcon className="size-4" />
-            </button>
+            <div className="flex shrink-0 items-stretch overflow-hidden rounded-xl">
+              <button
+                type="submit"
+                disabled={sendDisabled}
+                aria-label={
+                  sendMode === "new" ? t("agent.sendNew") : t("agent.send")
+                }
+                title={
+                  sendMode === "new" ? t("agent.sendNew") : t("agent.send")
+                }
+                className="inline-flex w-9 items-center justify-center bg-primary text-white transition duration-150 hover:brightness-[1.06] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <SendIcon className="size-4" />
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  type="button"
+                  disabled={sendDisabled}
+                  aria-label={t("agent.sendOptions")}
+                  title={t("agent.sendOptions")}
+                  className="flex items-center border-l border-white/25 bg-primary px-1 text-white outline-none transition duration-150 hover:brightness-[1.06] aria-expanded:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronDownIcon className="size-3" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="text-xs">
+                  <DropdownMenuRadioGroup
+                    value={sendMode}
+                    onValueChange={(value) =>
+                      setSendMode(value as "current" | "new")
+                    }
+                  >
+                    <DropdownMenuRadioItem value="current">
+                      {t("agent.sendCurrent")}
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="new">
+                      {t("agent.sendNew")}
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
         </form>
       </footer>
