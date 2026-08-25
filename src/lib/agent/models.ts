@@ -176,7 +176,11 @@ export async function clearApiKey(providerId: string): Promise<void> {
   unverify(providerId);
 }
 
-function localModel(id: string, baseUrl: string): Model<"openai-completions"> {
+function localModel(
+  id: string,
+  baseUrl: string,
+  input: ("text" | "image")[] = ["text"],
+): Model<"openai-completions"> {
   return {
     id,
     name: id,
@@ -184,7 +188,7 @@ function localModel(id: string, baseUrl: string): Model<"openai-completions"> {
     provider: LOCAL_PROVIDER_ID,
     baseUrl,
     reasoning: false,
-    input: ["text"],
+    input,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 128000,
     maxTokens: 32000,
@@ -193,6 +197,90 @@ function localModel(id: string, baseUrl: string): Model<"openai-completions"> {
       supportsReasoningEffort: false,
     },
   };
+}
+
+/** Smallest valid PNG (1×1, transparent) sent with the vision probe. */
+const VISION_PROBE_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+/** Cold model loads can be slow; give the probe generous room. */
+const IMAGE_PROBE_TIMEOUT_MS = 30_000;
+
+interface ChatCompletionsDto {
+  choices?: unknown[];
+  error?: { message?: string };
+}
+
+/**
+ * Generic OpenAI-compatible image-input probe: POST a tiny multimodal
+ * chat/completions request and see whether the server accepts it. This is the
+ * only capability check that works across every spec-following local server
+ * (Ollama, llama.cpp, LM Studio, vLLM, …) because the OpenAI API defines no
+ * capability-metadata endpoint. Returns true when a completion came back,
+ * false when the server rejected the image payload, and undefined when the
+ * result is inconclusive (network/CORS/timeout) — callers then assume
+ * text-only. Logs each verdict to the console.
+ */
+async function probeImageInput(
+  v1Url: string,
+  id: string,
+  signal: AbortSignal,
+): Promise<boolean | undefined> {
+  const timeout = AbortSignal.timeout(IMAGE_PROBE_TIMEOUT_MS);
+  const merged = signal.aborted ? signal : AbortSignal.any([signal, timeout]);
+  const started = performance.now();
+  try {
+    const response = await fetch(`${v1Url}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: id,
+        max_tokens: 4,
+        stream: false,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Reply with exactly: ok" },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/png;base64,${VISION_PROBE_PNG}`,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      signal: merged,
+    });
+    const ms = Math.round(performance.now() - started);
+    if (response.ok) {
+      const data = (await response.json().catch(() => undefined)) as
+        | ChatCompletionsDto
+        | undefined;
+      if (data !== undefined && Array.isArray(data.choices)) {
+        console.info(`[agent] "${id}" accepts image input (${ms} ms)`);
+        return true;
+      }
+      console.info(
+        `[agent] "${id}" returned no completion for the image probe (${ms} ms)`,
+      );
+      return false;
+    }
+    const detail = (await response.text().catch(() => "")).slice(0, 200);
+    console.info(
+      `[agent] "${id}" rejects image input — HTTP ${response.status}${detail ? `: ${detail}` : ""} (${ms} ms)`,
+    );
+    return false;
+  } catch (err) {
+    const ms = Math.round(performance.now() - started);
+    console.warn(
+      `[agent] "${id}" image probe inconclusive (${ms} ms), assuming text-only:`,
+      err,
+    );
+    return undefined;
+  }
 }
 
 async function fetchLocalModels(
@@ -223,9 +311,25 @@ async function fetchLocalModels(
       // ignore — the list stays empty until the endpoint answers
     }
   }
-  return ids
-    .filter((id) => !/embed|vision|clip/i.test(id))
-    .map((id) => localModel(id, v1Url));
+  // Embedding/CLIP/reranker checkpoints cannot chat; vision-named ones can,
+  // so only those three families are excluded.
+  const candidates = ids.filter((id) => !/embed|clip|rerank/i.test(id));
+  console.info(
+    `[agent] local LLM catalog: ${candidates.length} chat-capable model(s) at ${v1Url}`,
+  );
+  const models: Model<"openai-completions">[] = [];
+  // Sequential on purpose: each probe is a real completion that may load the
+  // model into memory, and parallel probes could page every listing into
+  // GPU/VRAM at once. Every candidate is probed — model ids say nothing
+  // reliable about vision support, only the server's answer does.
+  for (const id of candidates) {
+    const input: ("text" | "image")[] =
+      (await probeImageInput(v1Url, id, signal)) === true
+        ? ["text", "image"]
+        : ["text"];
+    models.push(localModel(id, v1Url, input));
+  }
+  return models;
 }
 
 function buildLocalProvider(baseUrl: string) {
@@ -434,9 +538,9 @@ export function listAvailableModels(): Array<{
   return out;
 }
 
-export function refreshModels(): Promise<void> {
+export function refreshModels(providerIds?: readonly string[]): Promise<void> {
   return getModels()
-    .refresh()
+    .refresh(providerIds === undefined ? undefined : { providers: providerIds })
     .then(() => undefined);
 }
 
@@ -459,15 +563,26 @@ export async function testConnection(providerId: string): Promise<string> {
       throw new Error("no_model");
     }
     const base = v1Url.replace(/\/v1\/?$/, "");
+    console.info(`[agent] testing local LLM connection at ${base}/v1 …`);
     const response = await fetch(`${base}/v1/models`, {
       signal: AbortSignal.timeout(15000),
     });
     if (!response.ok) {
+      console.warn(
+        `[agent] local LLM connection failed — HTTP ${response.status}`,
+      );
       throw new Error(`HTTP ${response.status}`);
     }
     const data = (await response.json()) as { data?: Array<{ id: string }> };
     const count = data?.data?.length ?? 0;
+    console.info(`[agent] local LLM reachable, ${count} model(s) listed`);
     markVerified(providerId);
+    // Re-pull the catalog (probing each candidate model's image input via a
+    // real multimodal completion) so the model picker reflects reality right
+    // after the test.
+    await refreshModels([providerId]).catch((err) => {
+      console.warn("[agent] local catalog refresh after test failed:", err);
+    });
     return count > 0 ? `${count} model${count === 1 ? "" : "s"}` : "reachable";
   }
   if (providerId === "openrouter") {
@@ -498,6 +613,7 @@ export async function testConnection(providerId: string): Promise<string> {
   if (model === undefined) {
     throw new Error("no_model");
   }
+  console.info(`[agent] testing ${providerId} via model ${model.id} …`);
   const response = await models.completeSimple(model, {
     messages: [
       {
