@@ -10,6 +10,7 @@
 
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { IMAGE_TOKEN_ESTIMATE } from "./images";
 import { getModels } from "./models";
 
 type AnyModel = Model<Api>;
@@ -130,6 +131,8 @@ function messageText(message: AgentMessage): string {
     } else if (b.type === "thinking") {
       // Count thinking conservatively even though it is not replayed.
       out += `${b.text ?? ""}\n`;
+    } else if (b.type === "image") {
+      out += "[image]\n";
     } else if (b.type === "toolCall") {
       out += `[tool:${b.name ?? "?"}] ${JSON.stringify(
         (b as { arguments?: unknown }).arguments ?? null,
@@ -137,6 +140,24 @@ function messageText(message: AgentMessage): string {
     }
   }
   return out;
+}
+
+/** Text tokens plus a fixed vision cost per attached image block. */
+function estimateMessageTokens(message: AgentMessage): number {
+  let tokens = estimateTextTokens(messageText(message));
+  if (
+    (message.role === "user" ||
+      message.role === "assistant" ||
+      message.role === "toolResult") &&
+    Array.isArray(message.content)
+  ) {
+    for (const block of message.content) {
+      if ((block as { type?: string }).type === "image") {
+        tokens += IMAGE_TOKEN_ESTIMATE;
+      }
+    }
+  }
+  return tokens;
 }
 
 export interface ContextMeasure {
@@ -161,7 +182,7 @@ export function measureContext(
   let heuristic = running;
   let anchor = { inputTokens: 0, priorSum: 0 };
   for (const message of messages) {
-    running += estimateTextTokens(messageText(message));
+    running += estimateMessageTokens(message);
     heuristic = running;
     if (message.role === "assistant" && message.usage?.input !== undefined) {
       const input = message.usage.input;

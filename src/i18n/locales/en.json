@@ -92,6 +92,16 @@
     "send": "Send",
     "stop": "Stop",
     "chatPlaceholder": "Ask the assistant… (Enter to send, Shift+Enter for newline)",
+    "attachImage": "Attach images",
+    "removeAttachment": "Remove attachment",
+    "imageOnlyTitle": "(image)",
+    "imageModelNoVision": "The selected model cannot see images — pick a vision-capable model first.",
+    "imageTooMany": "At most {{count}} images per message.",
+    "image": {
+      "unsupportedType": "Unsupported image type — use PNG, JPEG, WebP, or GIF.",
+      "tooLarge": "That image is too large — the limit is 8 MB.",
+      "decodeFailed": "Could not read that image."
+    },
     "showMore": "Show more",
     "showLess": "Show less",
     "contextOverflowRetry": "Model context was full — compacted the conversation and retrying…",

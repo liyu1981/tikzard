@@ -5,8 +5,14 @@ import type {
   AgentMessage,
   ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
+import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import { useAtomValue } from "jotai";
-import type { KeyboardEvent } from "react";
+import type {
+  ChangeEvent,
+  ClipboardEvent,
+  DragEvent,
+  KeyboardEvent,
+} from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -26,6 +32,13 @@ import {
   storeObservedContextLimit,
 } from "@/lib/agent/context";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
+import {
+  fileToImageContent,
+  type ImageLoadFailure,
+  imageContentToDataUrl,
+  MAX_ATTACHMENT_IMAGES,
+  supportsImageInput,
+} from "@/lib/agent/images";
 import {
   LOCAL_PROVIDER_ID,
   listAvailableModels,
@@ -57,6 +70,7 @@ import {
   BotIcon,
   CheckIcon,
   ChevronDownIcon,
+  ImageIcon,
   LoaderIcon,
   MessageSquareIcon,
   PlusIcon,
@@ -84,6 +98,13 @@ interface ToolChip {
   status: "running" | "done" | "error";
   args?: Record<string, unknown>;
   result?: unknown;
+}
+
+/** An image staged in the composer, not yet sent with a message. */
+interface AttachmentPreview {
+  id: string;
+  name: string;
+  content: ImageContent;
 }
 
 interface AgentChatProps {
@@ -167,25 +188,61 @@ function formatTime(timestamp: number): string {
 const USER_MSG_FOLD_WORDS = 100;
 
 /**
- * Right-aligned user bubble. Long messages collapse to three lines with a
- * show-more/show-less toggle; each bubble owns its expanded state so
- * transcript updates during streaming never reset it.
+ * Right-aligned user bubble. Renders any image blocks the message carries
+ * as clickable thumbnails (full view opens in a new tab). Long messages
+ * collapse to three lines with a show-more/show-less toggle; each bubble
+ * owns its expanded state so transcript updates during streaming never
+ * reset it.
  */
-function UserMessageBubble({ text }: { text: string }) {
+function UserMessageBubble({
+  text,
+  content,
+}: {
+  text: string;
+  content?: string | (TextContent | ImageContent)[];
+}) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const wordCount = text.trim().split(/\s+/).length;
   const fold = wordCount > USER_MSG_FOLD_WORDS;
+  const images = (Array.isArray(content) ? content : []).filter(
+    (b): b is ImageContent => (b as { type?: string }).type === "image",
+  );
   return (
     <div className="flex justify-end">
       <div className="max-w-[88%] rounded-2xl bg-primary px-3 py-2 text-sm text-white">
-        <p
-          className={`whitespace-pre-wrap break-words ${
-            fold && !expanded ? "line-clamp-3" : ""
-          }`}
-        >
-          {text}
-        </p>
+        {images.length > 0 && (
+          <div className="mb-1 flex flex-wrap justify-end gap-1">
+            {images.map((img) => {
+              const src = imageContentToDataUrl(img);
+              return (
+                <a
+                  key={`${img.mimeType}-${img.data.length}-${img.data.slice(0, 24)}`}
+                  href={src}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {/* biome-ignore lint/performance/noImgElement: base64 data URLs from IndexedDB can't go through next/image's server optimizer in this offline-first app */}
+                  <img
+                    src={src}
+                    alt={t("agent.attachImage")}
+                    draggable={false}
+                    className="max-h-32 rounded-lg border border-white/20 bg-white/10 object-contain"
+                  />
+                </a>
+              );
+            })}
+          </div>
+        )}
+        {text !== "" && (
+          <p
+            className={`whitespace-pre-wrap break-words ${
+              fold && !expanded ? "line-clamp-3" : ""
+            }`}
+          >
+            {text}
+          </p>
+        )}
         {fold && (
           <button
             type="button"
@@ -255,12 +312,14 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
     new Set(),
   );
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
   const [runError, setRunError] = useState<string | null>(null);
 
   const agentRef = useRef<Agent | null>(null);
   const latestRef = useRef<AgentSession | null>(null);
   const bridgeRef = useRef(bridge ?? null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const docIdRef = useRef(docId);
   const lastSeenLogIdRef = useRef(getLastCompileLogId());
   const autoFixChainRef = useRef(0);
@@ -376,12 +435,12 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
    * reported hard limit, compact against it, and retry once.
    */
   const promptGuarded = useCallback(
-    async (instance: Agent, text: string) => {
+    async (instance: Agent, text: string, images?: ImageContent[]) => {
       await ensureContextCapacity(instance, (notice) =>
         pushCompileLog("info", notice),
       );
       try {
-        await instance.prompt(text);
+        await instance.prompt(text, images);
         return;
       } catch (err) {
         const raw = err instanceof Error ? err.message : String(err);
@@ -401,8 +460,8 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
           pushCompileLog("info", notice),
         );
         // Retry on the compacted transcript; instance.prompt() appends the
-        // original user text itself.
-        await instance.prompt(text);
+        // original user text and attachments itself.
+        await instance.prompt(text, images);
       }
     },
     [t],
@@ -641,6 +700,7 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
     setIsThinking(false);
     setToolChips([]);
     setRunError(null);
+    setAttachments([]);
     if (docId === null) {
       // No open document (transient before the workbench mints an id).
       setSessions([]);
@@ -703,7 +763,7 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
    * human-friendly (e.g. a manually invoked skill's payload).
    */
   const runUserTurn = useCallback(
-    async (text: string, titleOverride?: string) => {
+    async (text: string, titleOverride?: string, images?: ImageContent[]) => {
       let sessionNow = latestRef.current;
       if (sessionNow === null) {
         const created = await createNewSession();
@@ -722,10 +782,11 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
       setStreaming(true);
       setRunError(null);
       try {
-        await promptGuarded(instance, text);
+        await promptGuarded(instance, text, images);
         if (sessionNow.title === t("agent.untitled")) {
-          const title =
-            titleOverride ?? text.slice(0, 40) + (text.length > 40 ? "…" : "");
+          const source =
+            titleOverride ?? (text !== "" ? text : t("agent.imageOnlyTitle"));
+          const title = source.slice(0, 40) + (source.length > 40 ? "…" : "");
           await persistSession(
             { ...sessionNow, title },
             instance.state.messages,
@@ -752,14 +813,115 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
     [runUserTurn],
   );
 
+  const allModels = listAvailableModels();
+  // Before any session exists, the selectors still surface the remembered
+  // model/thinking preferences — what the next conversation will use.
+  const rememberedModel = readLastModel();
+  const latestModelValue =
+    latest !== undefined
+      ? `${latest.providerId}::${latest.modelId}`
+      : rememberedModel !== undefined
+        ? `${rememberedModel.providerId}::${rememberedModel.modelId}`
+        : undefined;
+  const effectiveThinking = latest?.thinkingLevel ?? readLastThinking();
+  const selectedModel = allModels.find(
+    (m) => `${m.provider}::${m.model.id}` === latestModelValue,
+  );
+  const selectedModelLabel =
+    selectedModel !== undefined
+      ? `${selectedModel.model.name} · ${selectedModel.providerName}`
+      : undefined;
+  /** Whether the model that would send the next message accepts images. */
+  const imagesSupported =
+    selectedModel !== undefined && supportsImageInput(selectedModel.model);
+
+  /** Convert picked/pasted/dropped files into staged attachments, surfacing
+      the first failure reason (i18n key) when anything is rejected. */
+  const addImageFiles = useCallback(
+    (files: FileList | File[] | null) => {
+      if (files === null || files.length === 0) {
+        return;
+      }
+      const list = Array.from(files);
+      void (async () => {
+        const accepted: AttachmentPreview[] = [];
+        const reasons = new Set<ImageLoadFailure>();
+        let tooMany = false;
+        for (const file of list) {
+          if (accepted.length + attachments.length >= MAX_ATTACHMENT_IMAGES) {
+            tooMany = true;
+            break;
+          }
+          const result = await fileToImageContent(file);
+          if (result.ok) {
+            accepted.push({
+              id: newId(),
+              name: file.name,
+              content: result.content,
+            });
+          } else {
+            reasons.add(result.reason);
+          }
+        }
+        if (accepted.length > 0) {
+          setAttachments((prev) => [...prev, ...accepted]);
+        }
+        if (tooMany) {
+          setRunError(
+            t("agent.imageTooMany", { count: MAX_ATTACHMENT_IMAGES }),
+          );
+        } else if (reasons.size > 0) {
+          setRunError(t(`agent.image.${reasons.values().next().value}`));
+        }
+      })();
+    },
+    [attachments.length, t],
+  );
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const handleFileInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      addImageFiles(event.target.files);
+      event.target.value = "";
+    },
+    [addImageFiles],
+  );
+
+  const handleComposerPaste = useCallback(
+    (event: ClipboardEvent<HTMLTextAreaElement>) => {
+      if (event.clipboardData.files.length > 0) {
+        event.preventDefault();
+        addImageFiles(event.clipboardData.files);
+      }
+    },
+    [addImageFiles],
+  );
+
+  const handleComposerDrop = useCallback(
+    (event: DragEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      addImageFiles(event.dataTransfer.files);
+    },
+    [addImageFiles],
+  );
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (text === "" || streaming) {
+    const images = attachments.map((a) => a.content);
+    if ((text === "" && images.length === 0) || streaming) {
+      return;
+    }
+    if (images.length > 0 && !imagesSupported) {
+      setRunError(t("agent.imageModelNoVision"));
       return;
     }
     setInput("");
-    await runUserTurn(text);
-  }, [input, runUserTurn, streaming]);
+    setAttachments([]);
+    await runUserTurn(text, undefined, images.length > 0 ? images : undefined);
+  }, [attachments, imagesSupported, input, runUserTurn, streaming, t]);
 
   const handleStop = useCallback(() => {
     agentRef.current?.abort();
@@ -837,24 +999,6 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
     [persistSession],
   );
 
-  const allModels = listAvailableModels();
-  // Before any session exists, the selectors still surface the remembered
-  // model/thinking preferences — what the next conversation will use.
-  const rememberedModel = readLastModel();
-  const latestModelValue =
-    latest !== undefined
-      ? `${latest.providerId}::${latest.modelId}`
-      : rememberedModel !== undefined
-        ? `${rememberedModel.providerId}::${rememberedModel.modelId}`
-        : undefined;
-  const effectiveThinking = latest?.thinkingLevel ?? readLastThinking();
-  const selectedModel = allModels.find(
-    (m) => `${m.provider}::${m.model.id}` === latestModelValue,
-  );
-  const selectedModelLabel =
-    selectedModel !== undefined
-      ? `${selectedModel.model.name} · ${selectedModel.providerName}`
-      : undefined;
   const [modelQuery, setModelQuery] = useState("");
   const normalizedQuery = modelQuery.trim().toLowerCase();
   const filteredModels =
@@ -890,7 +1034,13 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
     allMessages?: AgentMessage[],
   ) => {
     if (message.role === "user") {
-      return <UserMessageBubble key={index} text={messageText(message)} />;
+      return (
+        <UserMessageBubble
+          key={index}
+          text={messageText(message)}
+          content={message.content}
+        />
+      );
     }
     if (message.role === "toolResult") {
       return null;
@@ -1321,21 +1471,72 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
             event.preventDefault();
             void handleSend();
           }}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={handleComposerDrop}
           className="flex items-stretch gap-1.5"
         >
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void handleSend();
-              }
-            }}
-            placeholder={t("agent.chatPlaceholder")}
-            rows={2}
-            className="min-h-10 flex-1 resize-none rounded-xl border border-border/50 bg-background px-2.5 py-2 text-sm outline-none focus-visible:border-ring disabled:opacity-50"
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {attachments.map((a) => (
+                  <div key={a.id} className="relative">
+                    {/* biome-ignore lint/performance/noImgElement: base64 data URLs staged in memory can't go through next/image's server optimizer in this offline-first app */}
+                    <img
+                      src={imageContentToDataUrl(a.content)}
+                      alt={a.name}
+                      draggable={false}
+                      className="size-14 rounded-lg border border-border/50 bg-background object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(a.id)}
+                      aria-label={t("agent.removeAttachment")}
+                      title={t("agent.removeAttachment")}
+                      className="absolute -right-1 -top-1 rounded-full border border-border/50 bg-background p-0.5 text-muted-foreground transition hover:text-foreground"
+                    >
+                      <XIcon className="size-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend();
+                }
+              }}
+              onPaste={handleComposerPaste}
+              placeholder={t("agent.chatPlaceholder")}
+              rows={2}
+              className="min-h-10 w-full flex-1 resize-none rounded-xl border border-border/50 bg-background px-2.5 py-2 text-sm outline-none focus-visible:border-ring disabled:opacity-50"
+            />
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            hidden
+            onChange={handleFileInputChange}
           />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={streaming || !imagesSupported}
+            aria-label={t("agent.attachImage")}
+            title={
+              imagesSupported
+                ? t("agent.attachImage")
+                : t("agent.imageModelNoVision")
+            }
+            className="glass-control inline-flex w-10 shrink-0 items-center justify-center rounded-xl transition duration-150 hover:brightness-[1.06] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ImageIcon className="size-4" />
+          </button>
           {streaming ? (
             <button
               type="button"
@@ -1349,7 +1550,10 @@ export function AgentChat({ bridge, docId, className }: AgentChatProps) {
           ) : (
             <button
               type="submit"
-              disabled={input.trim() === "" || allModels.length === 0}
+              disabled={
+                (input.trim() === "" && attachments.length === 0) ||
+                allModels.length === 0
+              }
               aria-label={t("agent.send")}
               title={t("agent.send")}
               className="inline-flex w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"

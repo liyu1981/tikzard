@@ -92,6 +92,16 @@
     "send": "发送",
     "stop": "停止",
     "chatPlaceholder": "向 AI 助手提问…（Enter 发送，Shift+Enter 换行）",
+    "attachImage": "添加图片",
+    "removeAttachment": "移除图片",
+    "imageOnlyTitle": "（图片）",
+    "imageModelNoVision": "当前模型不支持看图——请先选择支持视觉的模型。",
+    "imageTooMany": "每条消息最多 {{count}} 张图片。",
+    "image": {
+      "unsupportedType": "不支持的图片格式——请使用 PNG、JPEG、WebP 或 GIF。",
+      "tooLarge": "图片过大——上限为 8 MB。",
+      "decodeFailed": "无法读取该图片。"
+    },
     "showMore": "展开更多",
     "showLess": "收起",
     "contextOverflowRetry": "模型上下文已满——已压缩会话并重试…",
