@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512" role="img">
+<title>Wizard Cat - Simple Head Logo</title>
+<!-- App Background -->
+<rect width="100" height="100" rx="22" fill="#6B4DFF"/>
+
+<!-- Ears -->
+<path d="M 23 48 L 29 26 L 42 39 Z" fill="#FFB423" stroke="#1A1147" stroke-width="4" stroke-linejoin="round"/>
+<path d="M 77 48 L 71 26 L 58 39 Z" fill="#FFB423" stroke="#1A1147" stroke-width="4" stroke-linejoin="round"/>
+<!-- Inner Ears -->
+<path d="M 29 32 L 31.5 27.5 L 37 36 Z" fill="#FF5A8A"/>
+
+<path d="M 71 32 L 68.5 27.5 L 63 36 Z" fill="#FF5A8A"/>
+
+<!-- Head -->
+<rect x="22" y="38" width="56" height="44" rx="21" fill="#FFB423" stroke="#1A1147" stroke-width="4"/>
+
+<!-- Hat - Main Cone -->
+<path d="M 19 44 L 50 10 L 81 44 Z" fill="#2E1EB8" stroke="#1A1147" stroke-width="4" stroke-linejoin="round"/>
+<!-- Hat Brim -->
+<rect x="14" y="40" width="72" height="11" rx="5.5" fill="#2E1EB8" stroke="#1A1147" stroke-width="4"/>
+<!-- Hat Gold Band -->
+<rect x="27" y="30.5" width="46" height="9" rx="2" fill="#FFCC2E" stroke="#1A1147" stroke-width="2.5"/>
+<circle cx="50" cy="35" r="5.2" fill="#FFCC2E" stroke="#1A1147" stroke-width="2"/>
+<path d="M 47.2 35 L 50 32.2 L 52.8 35 L 50 37.8 Z" fill="#FF8A00"/>
+
+<!-- Face -->
+<!-- Eyes -->
+<circle cx="38.5" cy="58.5" r="9.5" fill="white" stroke="#1A1147" stroke-width="2.5"/>
+<circle cx="61.5" cy="58.5" r="9.5" fill="white" stroke="#1A1147" stroke-width="2.5"/>
+<circle cx="38.5" cy="60" r="5.5" fill="#1A1147"/>
+<circle cx="61.5" cy="60" r="5.5" fill="#1A1147"/>
+<circle cx="36.5" cy="56.5" r="2" fill="white"/>
+<circle cx="59.5" cy="56.5" r="2" fill="white"/>
+
+<!-- Nose & Mouth -->
+<path d="M 47.8 66.5 L 52.2 66.5 L 50 69.5 Z" fill="#1A1147" stroke="#1A1147" stroke-width="1.2" stroke-linejoin="round"/>
+<path d="M 45 70.5 C 45 70.5 47 72.5 50 72.5 C 53 72.5 55 70.5 55 70.5" fill="none" stroke="#1A1147" stroke-width="2" stroke-linecap="round"/>
+
+<!-- Hat Star - large enough for 32px -->
+<path d="M 50 19 L 51.1 21.6 L 53.8 21.6 L 51.6 23.2 L 52.3 25.8 L 50 24.2 L 47.7 25.8 L 48.4 23.2 L 46.2 21.6 L 48.9 21.6 Z" fill="white"/>
+</svg>
