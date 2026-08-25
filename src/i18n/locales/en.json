@@ -17,7 +17,6 @@
     "aboutLocal": "No server, no account — your drawings and chat sessions live only on this device.",
     "aboutAgent": "The AI assistant is bring-your-own-key: credentials stay in this browser and connect straight to the providers you choose.",
     "agentSetupHint": "The base system prompt sent to the AI assistant in every new session; the answer-language instruction follows the interface language. When you send a message, the current TikZ source is also appended so the model can see your drawing.",
-    "version": "Version",
     "tabStorage": "Storage",
     "maxVersionsLabel": "Max versions per document",
     "maxVersionsHint": "Oldest snapshots are dropped when a document exceeds this limit."

@@ -1,13 +1,16 @@
 "use client";
 
 import { atom, useAtomValue } from "jotai";
+import Image from "next/image";
 import { type ComponentType, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import tikzardLogo from "@/app/icon.svg";
 import { AgentSettings } from "@/components/agent/agent-settings";
 import {
   BotIcon,
   CheckIcon,
+  GithubIcon,
   GlobeIcon,
   InfoIcon,
   PackageIcon,
@@ -142,19 +145,34 @@ function AboutPanel() {
   const { t } = useTranslation();
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-semibold">{pkg.name}</p>
-      <div className="space-y-1.5 rounded-xl border border-border/40 bg-background/30 p-3 text-xs leading-relaxed text-muted-foreground">
+    <div className="flex min-h-full flex-col items-center justify-center gap-5 text-center">
+      {/* The artwork carries its own rounded-tile background and glow */}
+      <Image
+        src={tikzardLogo}
+        alt=""
+        draggable={false}
+        className="size-64 shrink-0"
+      />
+      <div className="space-y-1.5">
+        <p className="text-xl font-semibold tracking-wide">TikZard</p>
+        <p className="inline-flex items-center rounded-md border border-border/40 bg-background/50 px-2 py-0.5 font-mono text-[0.65rem] tabular-nums text-muted-foreground">
+          v{pkg.version}
+        </p>
+      </div>
+      <div className="max-w-2xl space-y-1.5 rounded-xl border border-border/40 bg-background/30 p-3 text-xs leading-relaxed text-muted-foreground">
         <p>{t("settings.aboutBlurb")}</p>
         <p>{t("settings.aboutLocal")}</p>
         <p>{t("settings.aboutAgent")}</p>
       </div>
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span>{t("settings.version")}</span>
-        <span className="font-mono tabular-nums text-foreground">
-          {pkg.version}
-        </span>
-      </p>
+      <a
+        href="https://github.com/liyu1981/tikzard"
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/50 px-2.5 py-1.5 text-xs font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98]"
+      >
+        <GithubIcon className="size-3.5" />
+        GitHub
+      </a>
     </div>
   );
 }

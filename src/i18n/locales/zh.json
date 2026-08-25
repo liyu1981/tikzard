@@ -17,7 +17,6 @@
     "aboutLocal": "无需服务器、无需账号——你的图形与对话仅保存在本设备上。",
     "aboutAgent": "AI 助手自带密钥（BYOK）：凭据只保存在本浏览器中，并直接连接你选择的提供商。",
     "agentSetupHint": "每个新会话都会发送给 AI 助手的基础系统提示词；回答语言的指令跟随界面语言。发送消息时还会附上当前 TikZ 源码，让模型看到你的图形。",
-    "version": "版本",
     "tabStorage": "存储",
     "maxVersionsLabel": "每个文档的最大版本数",
     "maxVersionsHint": "当文档超过此上限时，最旧的快照会被删除。"

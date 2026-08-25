@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <title>TikZard</title>
+  <defs>
+    <!-- Warm Obsidian / Deep Charcoal Background -->
+    <linearGradient id="warmBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A120B" />
+      <stop offset="100%" stop-color="#000000" />
+    </linearGradient>
+
+    <!-- Warm Ivory-to-Champagne Gradient for the Scientific 't' Components -->
+    <linearGradient id="warmIvory" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F5E6CA" />
+    </linearGradient>
+
+    <!-- Sunset Amber / Copper Gradient for the Star Headpiece -->
+    <linearGradient id="sunsetGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF9F43" />
+      <stop offset="100%" stop-color="#FF5252" />
+    </linearGradient>
+
+    <!-- Soft Warm Glow Filter -->
+    <filter id="warmGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#FF9F43" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Smooth Rounded Container Base -->
+  <rect width="512" height="512" rx="140" fill="url(#warmBg)" />
+
+  <g filter="url(#warmGlow)">
+    <!-- 1. HORIZONTAL CROSSBAR (Layered Beneath) -->
+    <path
+      d="M 165 200 L 325 200 L 332 165 L 172 165 Z"
+      fill="url(#warmIvory)"
+      opacity="0.95"
+    />
+
+    <!-- 2. VERTICAL STEM & BOTTOM HOOK (Layered Above) -->
+    <path
+      d="M 282 140 L 268 200 L 240 315 C 235 340, 240 360, 260 360 C 285 360, 305 340, 320 325 L 335 350 C 320 370, 290 395, 255 395 C 210 395, 195 360, 205 320 C 215 280, 230 140, 230 140 Z"
+      fill="url(#warmIvory)"
+    />
+
+    <!-- 3. GEOMETRIC MULTI-POINT VECTOR STAR (Shifted +25px Right) -->
+    <polygon
+      points="320,65 329,95 357,83 340,108 365,125 335,128 339,158 320,135 301,158 305,128 275,125 300,108 283,83 311,95"
+      fill="url(#sunsetGold)"
+    />
+  </g>
+</svg>
