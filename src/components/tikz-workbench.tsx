@@ -43,7 +43,7 @@ import {
 } from "@/lib/image-export";
 import { canvasToSinglePagePdfBlob } from "@/lib/pdf-export";
 import { ensureTikzJax } from "@/lib/tikzjax";
-import { saveNewVersion, type TikzVersion } from "@/lib/versions";
+import { getVersions, saveNewVersion, type TikzVersion } from "@/lib/versions";
 import {
   codeAtom,
   currentDocIdAtom,
@@ -178,6 +178,9 @@ const THUMBNAIL_MAX_PX = 640;
 /** Delay after a successful compile before capturing the thumbnail. */
 const THUMBNAIL_DELAY_MS = 1500;
 
+/** How long the "Saved" confirmation stays on the save-version button. */
+const VERSION_SAVED_FEEDBACK_MS = 1600;
+
 export function TikzWorkbench() {
   const { t } = useTranslation();
   const [code, setCode] = useAtom(codeAtom);
@@ -192,7 +195,11 @@ export function TikzWorkbench() {
   const [exporting, setExporting] = useState(false);
   const [thumbnail, setThumbnail] = useState<Blob | null>(null);
   const [versionsOpen, setVersionsOpen] = useState(false);
-  const [savingVersion, setSavingVersion] = useState(false);
+  const [saveVersionState, setSaveVersionState] = useState<
+    "idle" | "saving" | "saved"
+  >("idle");
+  /** Number the NEXT snapshot will get (max existing + 1); null until loaded. */
+  const [nextVersionNo, setNextVersionNo] = useState<number | null>(null);
   const [doneInfo, setDoneInfo] = useState<{ at: number; ms: number } | null>(
     null,
   );
@@ -207,11 +214,22 @@ export function TikzWorkbench() {
   const statusRef = useRef(status);
   const zoomRef = useRef(zoom);
   const doneInfoMsRef = useRef<number | null>(null);
+  const saveVersionTimerRef = useRef<number | null>(null);
   const tRef = useRef(t);
 
   useEffect(() => {
     tRef.current = t;
   }, [t]);
+
+  // Clear the pending "saved" feedback revert on unmount.
+  useEffect(
+    () => () => {
+      if (saveVersionTimerRef.current !== null) {
+        window.clearTimeout(saveVersionTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     codeRef.current = code;
@@ -381,6 +399,7 @@ export function TikzWorkbench() {
   const handleSaveVersion = useCallback(async (): Promise<number> => {
     const id = ensureDocId();
     const version = await saveNewVersion(id, codeRef.current, "manual");
+    setNextVersionNo(version.number + 1);
     pushCompileLog(
       "info",
       tRef.current("workbench.versionSaved", { number: version.number }),
@@ -395,6 +414,7 @@ export function TikzWorkbench() {
       const id = ensureDocId();
       if (codeRef.current !== version.code) {
         const checkpoint = await saveNewVersion(id, codeRef.current, "manual");
+        setNextVersionNo(checkpoint.number + 1);
         pushCompileLog(
           "info",
           tRef.current("workbench.versionSaved", {
@@ -411,6 +431,30 @@ export function TikzWorkbench() {
     [ensureDocId, setCode],
   );
 
+  // Load (and later re-load) the next version number whenever the open
+  // document changes, so the save button can advertise it up front.
+  useEffect(() => {
+    if (currentDocId === null) {
+      setNextVersionNo(null);
+      return;
+    }
+    let cancelled = false;
+    void getVersions(currentDocId)
+      .then((list) => {
+        if (!cancelled) {
+          setNextVersionNo((list.at(-1)?.number ?? 0) + 1);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNextVersionNo(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentDocId]);
+
   const agentBridge = useMemo<EditorMutationBridge>(() => {
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => window.setTimeout(resolve, ms));
@@ -426,6 +470,7 @@ export function TikzWorkbench() {
         const version = await saveNewVersion(id, codeRef.current, "agent", {
           note,
         });
+        setNextVersionNo(version.number + 1);
         pushCompileLog(
           "info",
           tRef.current("workbench.versionSaved", { number: version.number }),
@@ -757,22 +802,41 @@ export function TikzWorkbench() {
               </button>
               <button
                 type="button"
-                disabled={savingVersion}
+                disabled={saveVersionState !== "idle"}
                 onClick={() => {
-                  setSavingVersion(true);
-                  void handleSaveVersion().finally(() =>
-                    setSavingVersion(false),
-                  );
+                  if (saveVersionState !== "idle") {
+                    return;
+                  }
+                  setSaveVersionState("saving");
+                  void handleSaveVersion()
+                    .then(() => {
+                      // Confirm success briefly, then re-arm the button.
+                      setSaveVersionState("saved");
+                      if (saveVersionTimerRef.current !== null) {
+                        window.clearTimeout(saveVersionTimerRef.current);
+                      }
+                      saveVersionTimerRef.current = window.setTimeout(
+                        () => setSaveVersionState("idle"),
+                        VERSION_SAVED_FEEDBACK_MS,
+                      );
+                    })
+                    .catch(() => setSaveVersionState("idle"));
                 }}
                 title={t("workbench.saveVersion")}
-                className="glass-control !border-border/60 inline-flex items-center gap-1 rounded-lg bg-clip-padding px-3 py-1.5 text-sm font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                className={`glass-control !border-border/60 inline-flex items-center gap-1 rounded-lg bg-clip-padding px-3 py-1.5 text-sm font-medium transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${saveVersionState === "saved" ? "text-emerald-600 dark:text-emerald-400" : ""}`}
               >
-                {savingVersion ? (
+                {saveVersionState === "saving" ? (
                   <span className="inline-block size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
                   <CheckIcon className="size-3.5" />
                 )}
-                {t("workbench.saveVersion")}
+                {saveVersionState === "saved"
+                  ? t("workbench.saved")
+                  : nextVersionNo === null
+                    ? t("workbench.saveVersion")
+                    : t("workbench.saveVersionNumbered", {
+                        number: nextVersionNo,
+                      })}
               </button>
             </div>
             <p className="hidden truncate text-xs text-muted-foreground sm:block">

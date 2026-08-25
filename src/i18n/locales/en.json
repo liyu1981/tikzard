@@ -70,6 +70,8 @@
     "logStart": "Compile started",
     "logTimeout": "Compile timed out",
     "saveVersion": "Save version",
+    "saveVersionNumbered": "Save version (v{{number}})",
+    "saved": "Saved",
     "versionSaved": "Saved version {{number}}",
     "history": "Version history",
     "versionRestored": "Restored version {{number}}"

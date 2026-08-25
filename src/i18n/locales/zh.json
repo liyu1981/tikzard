@@ -70,6 +70,8 @@
     "logStart": "开始编译",
     "logTimeout": "编译超时",
     "saveVersion": "保存版本",
+    "saveVersionNumbered": "保存版本（v{{number}}）",
+    "saved": "已保存",
     "versionSaved": "已保存版本 {{number}}",
     "history": "版本历史",
     "versionRestored": "已恢复版本 {{number}}"
