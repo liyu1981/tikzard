@@ -181,52 +181,18 @@ export async function svgToPngBlob(
 export const ANNOTATION_MAX_PX = 1568;
 
 /**
- * Merge the live preview <svg> with a transparent annotation overlay canvas
- * into one downscaled PNG blob. The overlay spans the whole preview panel
- * (overlayHost); only the region aligned with the svg's on-screen box is
- * transferred onto the rasterized picture, so marks stay registered with the
- * artwork whatever the current zoom or layout.
+ * Rasterize the live preview <svg> — including its <g data-annotation-layer>
+ * marks, which live inside the artwork's own coordinate system — into one
+ * downscaled PNG blob for the assistant.
  */
-export async function composeAnnotatedBlob(
+export async function annotatedSnapshotBlob(
   svg: SVGSVGElement,
-  annotation: HTMLCanvasElement,
-  overlayHost: HTMLElement,
   zoom: number,
   maxPx: number = ANNOTATION_MAX_PX,
 ): Promise<Blob> {
   const natural = measureSvgNaturalSize(svg, zoom);
   const scale = Math.min(1, maxPx / Math.max(natural.width, natural.height));
-  const base = await renderSvgToCanvas(
-    svg,
-    natural.width * scale,
-    natural.height * scale,
-  );
-  const ctx = base.getContext("2d");
-  if (!ctx) {
-    throw new Error("canvas 2d context unavailable");
-  }
-  const svgRect = svg.getBoundingClientRect();
-  const hostRect = overlayHost.getBoundingClientRect();
-  const kx = hostRect.width > 0 ? annotation.width / hostRect.width : 0;
-  const ky = hostRect.height > 0 ? annotation.height / hostRect.height : 0;
-  const sw = svgRect.width * kx;
-  const sh = svgRect.height * ky;
-  if (kx > 0 && ky > 0 && sw >= 1 && sh >= 1) {
-    ctx.drawImage(
-      annotation,
-      (svgRect.left - hostRect.left) * kx,
-      (svgRect.top - hostRect.top) * ky,
-      sw,
-      sh,
-      0,
-      0,
-      base.width,
-      base.height,
-    );
-  } else {
-    ctx.drawImage(annotation, 0, 0, base.width, base.height);
-  }
-  return canvasToPngBlob(base);
+  return svgToPngBlob(svg, natural, scale);
 }
 
 /** Trigger a browser download for a blob built in-memory. */

@@ -36,8 +36,8 @@ import {
 } from "@/lib/compile-logs";
 import { saveDocument, setLastOpenedDocId } from "@/lib/documents";
 import {
+  annotatedSnapshotBlob,
   canvasToPngBlob,
-  composeAnnotatedBlob,
   downloadBlob,
   measureSvgNaturalSize,
   renderSvgToCanvas,
@@ -217,7 +217,6 @@ export function TikzWorkbench() {
   );
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const annotationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastRenderedCodeRef = useRef<string | null>(null);
   const renderSeqRef = useRef(0);
   const renderStartRef = useRef(0);
@@ -289,19 +288,18 @@ export function TikzWorkbench() {
     [],
   );
 
-  // Finish annotation: composite the overlay onto the rendered SVG, downscale
-  // to a vision-friendly size, and stage it in the assistant composer with a
-  // preset instruction (never sent automatically). An empty canvas just closes.
+  // Finish annotation: the marks already live inside the rendered SVG, so
+  // rasterizing it captures them directly; downscale to a vision-friendly
+  // size and stage the snapshot in the assistant composer with a preset
+  // instruction (never sent automatically). No marks just closes.
   const handleAnnotateFinish = useCallback(
     (hasContent: boolean) => {
       const svg = getPreviewSvg();
-      const overlay = annotationCanvasRef.current;
-      const host = previewHostEl;
       setAnnotating(false);
-      if (!hasContent || !svg || !overlay || !host) {
+      if (!hasContent || !svg) {
         return;
       }
-      void composeAnnotatedBlob(svg, overlay, host, zoomRef.current)
+      void annotatedSnapshotBlob(svg, zoomRef.current)
         .then(blobToImageContent)
         .then((content) => {
           setPendingAnnotation({
@@ -316,7 +314,7 @@ export function TikzWorkbench() {
           pushCompileLog("error", tRef.current("workbench.exportFailed")),
         );
     },
-    [getPreviewSvg, previewHostEl, setLeftTab, setPendingAnnotation],
+    [getPreviewSvg, setLeftTab, setPendingAnnotation],
   );
 
   const runExport = useCallback(
@@ -925,6 +923,21 @@ export function TikzWorkbench() {
           </div>
           {rightTab === "preview" && (
             <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label={t("workbench.annotate")}
+                title={t("workbench.annotate")}
+                aria-pressed={annotating}
+                disabled={status !== "done"}
+                onClick={() => setAnnotating((prev) => !prev)}
+                className={`rounded-full border border-border/50 bg-background/70 p-1.5 shadow-sm backdrop-blur-md transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-40 ${
+                  annotating
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground"
+                }`}
+              >
+                <PencilIcon className="size-3.5" />
+              </button>
               <div className="flex items-center gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 shadow-sm backdrop-blur-md">
                 <button
                   type="button"
@@ -996,21 +1009,6 @@ export function TikzWorkbench() {
                     <path d="M12 5v14M5 12h14" />
                   </svg>
                 </button>
-                <button
-                  type="button"
-                  aria-label={t("workbench.annotate")}
-                  title={t("workbench.annotate")}
-                  aria-pressed={annotating}
-                  disabled={status !== "done"}
-                  onClick={() => setAnnotating((prev) => !prev)}
-                  className={`rounded-full p-1.5 transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-40 ${
-                    annotating
-                      ? "bg-primary/15 text-primary"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  <PencilIcon className="size-3.5" />
-                </button>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -1079,7 +1077,7 @@ export function TikzWorkbench() {
             {annotating && previewHostEl !== null && (
               <AnnotateLayer
                 mount={previewHostEl}
-                canvasRef={annotationCanvasRef}
+                stage={stageRef.current}
                 onFinish={handleAnnotateFinish}
                 onCancel={() => setAnnotating(false)}
               />
