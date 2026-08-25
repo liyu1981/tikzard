@@ -1,3 +1,4 @@
+import { GoogleAnalytics } from "@next/third-parties/google";
 import type { Metadata } from "next";
 import Script from "next/script";
 import { AmbientBackground } from "@/components/ambient-background";
@@ -11,6 +12,11 @@ export const metadata: Metadata = {
 };
 
 const themeInit = `(function(){try{var t=localStorage.getItem("tikzard-theme")||"system";var d=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var el=document.documentElement;el.classList.toggle("dark",d);el.style.colorScheme=d?"dark":"light";}catch(e){}})();`;
+
+// Server-side env var, read while the root layout is rendered: set it in
+// .env for local dev, or as an environment variable of the machine/CI
+// that runs `pnpm build` in production.
+const gaMeasurementId = process.env.GA_MEASUREMENT_ID;
 
 export default function RootLayout({
   children,
@@ -36,6 +42,7 @@ export default function RootLayout({
           </I18nProvider>
         </ThemeProvider>
       </body>
+      {gaMeasurementId ? <GoogleAnalytics gaId={gaMeasurementId} /> : null}
     </html>
   );
 }

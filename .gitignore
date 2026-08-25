@@ -15,6 +15,11 @@ next-env.d.ts
 # vendored tikzjax runtime (restored by postinstall)
 public/tikzjax/
 
+# env files (keep .env.example committed as template)
+.env
+.env.*
+!.env.example
+
 # misc
 .DS_Store
 *.pem.bak
