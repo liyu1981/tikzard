@@ -24,6 +24,10 @@
   "documents": {
     "open": "打开文档",
     "new": "新建文档",
+    "import": "导入…",
+    "importFailed": "部分文件无法导入。",
+    "duplicate": "创建副本",
+    "duplicatedName": "{{title}} 副本",
     "prevPage": "上一页",
     "nextPage": "下一页",
     "empty": "暂无已保存的文档。",

@@ -104,3 +104,44 @@ export function deleteVersions(docId: string): Promise<void> {
     return store.get(docId);
   }).then(() => undefined);
 }
+
+/**
+ * Bulk-restore versions from a project export (document import). Entries are
+ * validated, capped to getMaxVersions(), and renumbered sequentially; unknown
+ * sources degrade to "manual". Thumbnails are not part of exports.
+ */
+export function importVersions(
+  docId: string,
+  versions: readonly {
+    code?: unknown;
+    createdAt?: unknown;
+    source?: unknown;
+    note?: unknown;
+  }[],
+): Promise<void> {
+  const valid = versions.filter(
+    (
+      v,
+    ): v is {
+      code: string;
+      createdAt: number;
+      source?: unknown;
+      note?: unknown;
+    } =>
+      typeof v?.code === "string" &&
+      typeof v.createdAt === "number" &&
+      Number.isFinite(v.createdAt),
+  );
+  const restored: TikzVersion[] = valid
+    .slice(-getMaxVersions())
+    .map((v, index) => ({
+      number: index + 1,
+      code: v.code,
+      createdAt: v.createdAt,
+      source: v.source === "agent" ? "agent" : "manual",
+      ...(typeof v.note === "string" ? { note: v.note } : {}),
+    }));
+  return withStore(VERSIONS_STORE_NAME, "readwrite", (store) =>
+    store.put({ docId, versions: restored }),
+  ).then(() => undefined);
+}

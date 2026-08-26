@@ -9,7 +9,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -23,11 +22,16 @@ import {
   deleteDocument,
   listDocuments,
   loadDocument,
+  saveDocument,
   setLastOpenedDocId,
+  type TikzDocument,
   type TikzDocumentMeta,
 } from "@/lib/documents";
-import { exportDocumentById } from "@/lib/project-export";
-import { deleteVersions } from "@/lib/versions";
+import {
+  exportDocumentById,
+  type ProjectExportPayload,
+} from "@/lib/project-export";
+import { deleteVersions, importVersions } from "@/lib/versions";
 import {
   codeAtom,
   currentDocIdAtom,
@@ -72,6 +76,47 @@ function PlusIcon(props: React.ComponentProps<"svg">) {
       {...props}
     >
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function CopyIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}
+
+function ImportIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" x2="12" y1="3" y2="15" />
     </svg>
   );
 }
@@ -182,7 +227,9 @@ export function OpenDocumentMenu() {
   const [docs, setDocs] = useState<DocumentRow[]>([]);
   const [page, setPage] = useState(0);
   const [open, setOpen] = useState(false);
+  const [importFailed, setImportFailed] = useState(false);
   const thumbUrlsRef = useRef<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(
     () => () => {
@@ -251,6 +298,89 @@ export function OpenDocumentMenu() {
     }
   }
 
+  /** Clone a stored document under a fresh id; versions/sessions are not
+   *  copied — the duplicate starts as a clean, independent document. */
+  async function handleDuplicate(id: string) {
+    const doc = await loadDocument(id);
+    if (doc === undefined) {
+      return;
+    }
+    const copy: TikzDocument = {
+      ...doc,
+      id: crypto.randomUUID(),
+      title: t("documents.duplicatedName", { title: doc.title }),
+      updatedAt: Date.now(),
+    };
+    await saveDocument(copy);
+    await refresh();
+  }
+
+  async function handleImportFiles(files: FileList | null) {
+    if (files === null || files.length === 0) {
+      return;
+    }
+    const imported: TikzDocument[] = [];
+    let failed = false;
+    for (const file of Array.from(files)) {
+      try {
+        const text = await file.text();
+        const isJson =
+          /\.json$/i.test(file.name) || file.type === "application/json";
+        if (isJson) {
+          const payload = JSON.parse(text) as ProjectExportPayload;
+          if (
+            payload?.app !== "tikzard" ||
+            typeof payload.document?.code !== "string"
+          ) {
+            failed = true;
+            continue;
+          }
+          const doc: TikzDocument = {
+            id: crypto.randomUUID(),
+            title:
+              payload.document.title ||
+              file.name
+                .replace(/\.tikzard\.json$/i, "")
+                .replace(/\.[^.]+$/, ""),
+            code: payload.document.code,
+            updatedAt: Date.now(),
+          };
+          await saveDocument(doc);
+          if (Array.isArray(payload.versions) && payload.versions.length > 0) {
+            await importVersions(doc.id, payload.versions).catch(
+              () => undefined,
+            );
+          }
+          imported.push(doc);
+        } else {
+          // Raw TikZ source (.tex/.txt/…): the filename stem becomes the title.
+          const doc: TikzDocument = {
+            id: crypto.randomUUID(),
+            title: file.name.replace(/\.[^.]+$/, ""),
+            code: text,
+            updatedAt: Date.now(),
+          };
+          await saveDocument(doc);
+          imported.push(doc);
+        }
+      } catch {
+        failed = true;
+      }
+    }
+    setImportFailed(failed);
+    await refresh();
+    // Land in the newest import so the user can keep working immediately.
+    const last = imported.at(-1);
+    if (last !== undefined) {
+      setCode(last.code);
+      setDocTitle(last.title);
+      setCurrentDocId(last.id);
+      setLastOpenedDocId(last.id);
+      setEntryGate("workbench");
+      setOpen(false);
+    }
+  }
+
   async function handleExport(id: string) {
     try {
       await exportDocumentById(id);
@@ -286,10 +416,7 @@ export function OpenDocumentMenu() {
         <TooltipContent>{t("documents.open")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="start" className="w-[20rem] p-1 text-xs">
-        <div className="flex items-center justify-between gap-2 px-1 pb-1 pt-0.5">
-          <DropdownMenuLabel className="p-0">
-            {t("documents.open")}
-          </DropdownMenuLabel>
+        <div className="flex items-center justify-end gap-2 px-1 pb-1 pt-0.5">
           <DropdownMenuItem
             onSelect={handleNew}
             className="glass-control !border-border/60 m-0 h-auto w-fit shrink-0 rounded-full bg-clip-padding px-2.5 py-1.5 text-xs font-medium text-foreground/90 shadow-sm transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98]"
@@ -297,8 +424,36 @@ export function OpenDocumentMenu() {
             <PlusIcon className="size-3.5" />
             {t("documents.new")}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              setImportFailed(false);
+              fileInputRef.current?.click();
+            }}
+            className="glass-control !border-border/60 m-0 h-auto w-fit shrink-0 rounded-full bg-clip-padding px-2.5 py-1.5 text-xs font-medium text-foreground/90 shadow-sm transition duration-150 hover:-translate-y-px hover:brightness-[1.06] active:scale-[0.98]"
+          >
+            <ImportIcon className="size-3.5" />
+            {t("documents.import")}
+          </DropdownMenuItem>
         </div>
         <DropdownMenuSeparator />
+        {/* Hidden picker behind the Import pill: TikZard project exports plus
+            raw .tex/.txt sources. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.tex,.txt,.latex"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            void handleImportFiles(event.target.files);
+            event.target.value = "";
+          }}
+        />
+        {importFailed && (
+          <p className="px-2 pb-1 text-[0.65rem] text-red-500">
+            {t("documents.importFailed")}
+          </p>
+        )}
         {/* Up to 9 documents per page; the list scrolls internally when a
             full page is taller than the viewport allows. */}
         <div className="flex max-h-[32rem] flex-col gap-1.5 overflow-y-auto px-1 pb-1">
@@ -334,6 +489,15 @@ export function OpenDocumentMenu() {
                   </span>
                 </button>
                 <div className="absolute right-1 top-1 flex items-center gap-0.5 opacity-0 transition duration-150 focus-within:opacity-100 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => void handleDuplicate(doc.id)}
+                    aria-label={t("documents.duplicate")}
+                    title={t("documents.duplicate")}
+                    className="rounded-md bg-background/80 p-1 text-muted-foreground shadow-sm backdrop-blur-sm transition duration-150 hover:bg-foreground/[0.06] hover:text-foreground active:scale-[0.95]"
+                  >
+                    <CopyIcon className="size-3" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleExport(doc.id)}

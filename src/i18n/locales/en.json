@@ -24,6 +24,10 @@
   "documents": {
     "open": "Open document",
     "new": "New document",
+    "import": "Import…",
+    "importFailed": "Some files could not be imported.",
+    "duplicate": "Duplicate document",
+    "duplicatedName": "{{title}} (copy)",
     "prevPage": "Previous page",
     "nextPage": "Next page",
     "empty": "No saved documents yet.",
