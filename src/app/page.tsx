@@ -10,7 +10,6 @@ import {
   SettingsDialog,
   settingsRequestAtom,
 } from "@/components/settings-dialog";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import { TikzWorkbench } from "@/components/tikz-workbench";
 import {
   Tooltip,
@@ -93,9 +92,10 @@ export default function Home() {
         <div className="apple-panel">
           <div className="mx-auto flex h-12 max-w-[1920px] items-center gap-2 px-6">
             <OpenDocumentMenu />
-            {/* The title is always mounted so the settings and theme buttons
-                stay pinned to the right; with no document open it is empty
-                and non-editable. The close button is document-scoped only. */}
+            {/* The title is always mounted so the settings button stays
+                pinned right; with no document open it is empty and
+                non-editable. The close button is document-scoped only.
+                Theme and language live in Settings → System. */}
             <EditableTitle disabled={entryGate === "welcome"} />
             {entryGate === "workbench" && (
               <Tooltip>
@@ -114,7 +114,6 @@ export default function Home() {
             )}
             <div className="flex items-center gap-2">
               <SettingsDialog />
-              <ThemeSwitcher />
             </div>
           </div>
         </div>

@@ -1,6 +1,5 @@
 {
   "theme": {
-    "label": "Theme",
     "light": "Light theme",
     "dark": "Dark theme",
     "system": "Follow system theme"
@@ -9,7 +8,8 @@
     "title": "Settings",
     "tabAI": "LLM Setup",
     "tabAgentSetup": "Agent Setup",
-    "tabLanguage": "Language",
+    "tabSystem": "System",
+    "themeLabel": "Appearance",
     "tabAbout": "About",
     "languageLabel": "Interface language",
     "languageHint": "Applies immediately and is remembered for future visits.",

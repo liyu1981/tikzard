@@ -18,15 +18,17 @@ import {
   SparklesIcon,
   XIcon,
 } from "@/components/agent/icons";
+import { useTheme } from "@/components/theme-provider";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { Theme } from "@/lib/theme";
 import { getMaxVersions, setMaxVersions } from "@/lib/versions";
 import pkg from "../../package.json";
 
-type SettingsTab = "ai" | "setup" | "language" | "storage" | "about";
+type SettingsTab = "ai" | "setup" | "system" | "storage" | "about";
 
 /**
  * Shared request channel so controls outside this component (e.g. the page
@@ -42,6 +44,54 @@ const LANGUAGES = [
   { code: "en", native: "English" },
   { code: "zh", native: "简体中文" },
 ];
+
+const THEME_OPTIONS: { value: Theme; labelKey: string }[] = [
+  { value: "light", labelKey: "theme.light" },
+  { value: "dark", labelKey: "theme.dark" },
+  { value: "system", labelKey: "theme.system" },
+];
+
+/** Appearance picker: light / dark / follow-system. */
+function ThemeSettings() {
+  const { t } = useTranslation();
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        {t("settings.themeLabel")}
+      </p>
+      <fieldset className="m-0 overflow-hidden rounded-xl border border-border/40 p-0">
+        <legend className="sr-only">{t("settings.themeLabel")}</legend>
+        {THEME_OPTIONS.map(({ value, labelKey }) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={theme === value}
+            onClick={() => setTheme(value)}
+            className={`flex w-full items-center justify-between px-3 py-2.5 text-sm transition-colors ${
+              value === "light" ? "" : "border-t border-border/40"
+            } ${theme === value ? "bg-primary/10 font-medium" : "hover:bg-foreground/[0.05]"}`}
+          >
+            <span>{t(labelKey)}</span>
+            {theme === value && (
+              <CheckIcon className="size-4 shrink-0 text-primary" />
+            )}
+          </button>
+        ))}
+      </fieldset>
+    </div>
+  );
+}
+
+function SystemSettings() {
+  return (
+    <div className="space-y-6">
+      <ThemeSettings />
+      <LanguageSettings />
+    </div>
+  );
+}
 
 function LanguageSettings() {
   const { t, i18n } = useTranslation();
@@ -179,9 +229,9 @@ function AboutPanel() {
 
 /**
  * Page-level Settings dialog: a fixed-size card with a vertical tab rail on
- * the left (AI assistant / language / about) and the active panel on the
- * right, so switching tabs never resizes the dialog. The trigger sits in
- * the top-right controls (left of the theme switcher).
+ * the left (AI assistant / agent setup / system / storage / about) and the
+ * active panel on the right, so switching tabs never resizes the dialog.
+ * The trigger sits in the top-right controls of the header.
  */
 export function SettingsDialog() {
   const { t } = useTranslation();
@@ -221,7 +271,7 @@ export function SettingsDialog() {
   }[] = [
     { id: "ai", labelKey: "settings.tabAI", Icon: BotIcon },
     { id: "setup", labelKey: "settings.tabAgentSetup", Icon: SparklesIcon },
-    { id: "language", labelKey: "settings.tabLanguage", Icon: GlobeIcon },
+    { id: "system", labelKey: "settings.tabSystem", Icon: GlobeIcon },
     { id: "storage", labelKey: "settings.tabStorage", Icon: PackageIcon },
     { id: "about", labelKey: "settings.tabAbout", Icon: InfoIcon },
   ];
@@ -307,9 +357,9 @@ export function SettingsDialog() {
                       <AgentSetupPanel />
                     </div>
                   )}
-                  {tab === "language" && (
-                    <div role="tabpanel" aria-label={t("settings.tabLanguage")}>
-                      <LanguageSettings />
+                  {tab === "system" && (
+                    <div role="tabpanel" aria-label={t("settings.tabSystem")}>
+                      <SystemSettings />
                     </div>
                   )}
                   {tab === "storage" && (

@@ -1,6 +1,5 @@
 {
   "theme": {
-    "label": "主题",
     "light": "浅色主题",
     "dark": "深色主题",
     "system": "跟随系统主题"
@@ -9,7 +8,8 @@
     "title": "设置",
     "tabAI": "LLM 设置",
     "tabAgentSetup": "智能体设置",
-    "tabLanguage": "语言",
+    "tabSystem": "系统",
+    "themeLabel": "外观",
     "tabAbout": "关于",
     "languageLabel": "界面语言",
     "languageHint": "立即生效，并会在以后的访问中记住你的选择。",
