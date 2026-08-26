@@ -117,6 +117,7 @@
     "stop": "Stop",
     "chatPlaceholder": "Ask the assistant… (Enter to send, Shift+Enter for newline, Ctrl+Enter for a new chat)",
     "attachImage": "Attach images",
+    "viewImage": "View image",
     "removeAttachment": "Remove attachment",
     "annotatedImageName": "Annotated picture",
     "annotatedPrompt": "First analyse what is instructed in the annotated picture, then modify our TikZ drawing accordingly.",

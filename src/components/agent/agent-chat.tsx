@@ -80,6 +80,7 @@ import {
   TrashIcon,
   XIcon,
 } from "./icons";
+import { ImageLightbox } from "./image-lightbox";
 import { MarkdownView } from "./markdown";
 
 const LAST_MODEL_KEY = "agent.lastModel";
@@ -216,20 +217,12 @@ function UserMessageBubble({
             {images.map((img) => {
               const src = imageContentToDataUrl(img);
               return (
-                <a
+                <ImageLightbox
                   key={`${img.mimeType}-${img.data.length}-${img.data.slice(0, 24)}`}
-                  href={src}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {/* biome-ignore lint/performance/noImgElement: base64 data URLs from IndexedDB can't go through next/image's server optimizer in this offline-first app */}
-                  <img
-                    src={src}
-                    alt={t("agent.attachImage")}
-                    draggable={false}
-                    className="max-h-32 rounded-lg border border-white/20 bg-white/10 object-contain"
-                  />
-                </a>
+                  src={src}
+                  alt={t("agent.attachImage")}
+                  className="max-h-32 rounded-lg border border-white/20 bg-white/10 object-contain"
+                />
               );
             })}
           </div>
@@ -1551,11 +1544,9 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
               <div className="flex flex-wrap gap-1">
                 {attachments.map((a) => (
                   <div key={a.id} className="relative">
-                    {/* biome-ignore lint/performance/noImgElement: base64 data URLs staged in memory can't go through next/image's server optimizer in this offline-first app */}
-                    <img
+                    <ImageLightbox
                       src={imageContentToDataUrl(a.content)}
                       alt={a.name}
-                      draggable={false}
                       className="size-14 rounded-lg border border-border/50 bg-background object-cover"
                     />
                     <button

@@ -117,6 +117,7 @@
     "stop": "停止",
     "chatPlaceholder": "向 AI 助手提问…（Enter 发送，Shift+Enter 换行，Ctrl+Enter 新对话发送）",
     "attachImage": "添加图片",
+    "viewImage": "查看图片",
     "removeAttachment": "移除图片",
     "annotatedImageName": "标注图片",
     "annotatedPrompt": "请先分析标注图片中的修改意见，然后据此修改我们的 TikZ 图形。",
