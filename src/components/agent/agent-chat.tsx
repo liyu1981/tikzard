@@ -843,10 +843,15 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
   const selectedModel = allModels.find(
     (m) => `${m.provider}::${m.model.id}` === latestModelValue,
   );
+  /** Trigger label: provider leads, in bold, then the model name. */
   const selectedModelLabel =
-    selectedModel !== undefined
-      ? `${selectedModel.model.name} · ${selectedModel.providerName}`
-      : undefined;
+    selectedModel !== undefined ? (
+      <>
+        <span className="font-semibold">{selectedModel.providerName}</span>
+        {" · "}
+        {selectedModel.model.name}
+      </>
+    ) : undefined;
   /** Whether the model that would send the next message accepts images. */
   const imagesSupported =
     selectedModel !== undefined && supportsImageInput(selectedModel.model);
@@ -1449,7 +1454,9 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
                         key={`${m.provider}::${m.model.id}`}
                         value={`${m.provider}::${m.model.id}`}
                       >
-                        {m.model.name} · {m.providerName}
+                        <span className="font-semibold">{m.providerName}</span>
+                        {" · "}
+                        {m.model.name}
                       </DropdownMenuRadioItem>
                     ))}
                   </DropdownMenuRadioGroup>
