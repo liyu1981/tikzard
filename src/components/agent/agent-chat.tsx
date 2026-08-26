@@ -831,8 +831,10 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
 
   const allModels = listAvailableModels();
   // Before any session exists, the selectors still surface the remembered
-  // model/thinking preferences — what the next conversation will use.
-  const rememberedModel = readLastModel();
+  // model/thinking preferences — what the next conversation will use. The
+  // model is state (seeded from localStorage) so picking one rerenders the
+  // controlled picker even without an active session.
+  const [rememberedModel, setRememberedModel] = useState(() => readLastModel());
   const latestModelValue =
     latest !== undefined
       ? `${latest.providerId}::${latest.modelId}`
@@ -1011,6 +1013,10 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
         LAST_MODEL_KEY,
         JSON.stringify({ providerId, modelId }),
       );
+      // The picker is fully controlled, so the remembered choice must live in
+      // state: before a session exists this is the only thing that rerenders
+      // the selector (localStorage alone would snap the highlight back).
+      setRememberedModel({ providerId, modelId });
       const instance = agentRef.current;
       if (instance !== null && latestRef.current !== null) {
         const model = resolveModel(providerId, modelId);
