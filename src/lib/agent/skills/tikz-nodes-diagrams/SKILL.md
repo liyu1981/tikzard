@@ -8,14 +8,17 @@ description: Node-and-arrow diagram recipes (block diagrams, flowcharts, graphs,
 Box-and-arrow figures are built from `node`s placed relative to each other.
 All libraries used here are present in this environment (`positioning`,
 `calc`, `fit`, `matrix`, `shapes.geometric`, `arrows.meta`, `angles`,
-`quotes`, `automata`, ...). Load them by writing `\usetikzlibrary{...}`
-lines directly above `\begin{tikzpicture}` - they compile fine in this
-environment (unlike `\usepackage`, which must never be used).
+`quotes`, `automata`, ...). Enable them with the **TikZ Libraries** input in
+the workbench UI or by calling the `set_tikz_libraries` tool — for example
+`set_tikz_libraries(["positioning", "arrows.meta"])`.
+
+**Never write `\usetikzlibrary{...}` or `\usepackage{...}` in the source.**
+Libraries and packages are applied through the selection, not through source
+lines; the editor content stays a clean, single tikzpicture.
 
 ## Relative placement (never hardcode coordinates)
 
 ```latex
-\usetikzlibrary{positioning}
 \begin{tikzpicture}[node distance=8mm,
   block/.style={draw, thick, rounded corners, minimum width=14mm,
     minimum height=7mm, fill=blue!10}]
@@ -28,6 +31,8 @@ environment (unlike `\usepackage`, which must never be used).
   \draw[-{Stealth}] (b) -- node[above] {$f$} (c);
 \end{tikzpicture}
 ```
+
+(Libraries needed: `positioning`, `arrows.meta`.)
 
 - `right=of a`, `above right=4mm and 2mm of b` - positioning beats manual
   x/y arithmetic and survives label-length changes.
@@ -48,8 +53,7 @@ environment (unlike `\usepackage`, which must never be used).
 ## Fit a box around others
 
 ```latex
-\usetikzlibrary{fit}
-% dashed container around nodes a and b
+% dashed container around nodes a and b (library: fit)
 \node[draw, dashed, inner sep=2mm, fit=(a)(b)] (box) {};
 ```
 
@@ -63,7 +67,7 @@ with `align=center` and `\\`.
 ## Automata / state machines
 
 ```latex
-\usetikzlibrary{automata, positioning}
+% state machines (libraries: automata, positioning)
 % start state with double circle, accepting marked
 \node[state, initial, accepting] (q0) {$q_0$};
 \node[state, right=of q0] (q1) {$q_1$};

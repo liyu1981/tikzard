@@ -15,7 +15,9 @@ import {
   currentDocIdAtom,
   docTitleAtom,
   entryGateAtom,
+  librariesAtom,
   NEW_DOCUMENT_CODE,
+  packagesAtom,
 } from "@/lib/workbench-state";
 
 /**
@@ -29,10 +31,14 @@ export function WelcomePage() {
   const setCode = useSetAtom(codeAtom);
   const setDocTitle = useSetAtom(docTitleAtom);
   const setCurrentDocId = useSetAtom(currentDocIdAtom);
+  const setPackages = useSetAtom(packagesAtom);
+  const setLibraries = useSetAtom(librariesAtom);
   const setEntryGate = useSetAtom(entryGateAtom);
 
   function handleStart() {
     setCode(NEW_DOCUMENT_CODE);
+    setPackages([]);
+    setLibraries([]);
     setDocTitle(t("documents.untitled"));
     setCurrentDocId(null);
     setLastOpenedDocId(null);

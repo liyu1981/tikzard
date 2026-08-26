@@ -10,6 +10,12 @@
  */
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type TSchema, Type } from "@earendil-works/pi-ai";
+import {
+  SUPPORTED_LIBRARY_IDS,
+  SUPPORTED_PACKAGE_IDS,
+  validateLibraryIds,
+  validatePackageIds,
+} from "@/lib/tikz-packages";
 import type { EditorMutationBridge } from "./editor-mutations";
 import { formatSkillPayload, getSkillByName } from "./skills";
 
@@ -134,11 +140,103 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
     },
   });
 
+  const getPackages = tool({
+    name: "get_tikz_packages",
+    label: "Read TikZ packages",
+    description:
+      "Report the optional LaTeX packages currently selected for the open diagram. Use to check which packages are enabled before drawing.",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const ed = requireBridge(bridge);
+      const ids = ed.getPackages();
+      return textBlocks(
+        ids.length > 0
+          ? `enabledPackages: ${ids.join(", ")}`
+          : "enabledPackages: (none — core TikZ/PGF only)",
+      );
+    },
+  });
+
+  const setPackages = tool({
+    name: "set_tikz_packages",
+    label: "Set TikZ packages",
+    description: `Select which optional LaTeX packages the current diagram needs. Pass the exact package ids; the preview recompiles automatically. Use this instead of writing \\usepackage in the source. Supported ids: ${[...SUPPORTED_PACKAGE_IDS].join(", ")}.`,
+    parameters: Type.Object({
+      packages: Type.Array(
+        Type.String({
+          description:
+            'Package ids to enable, e.g. ["circuitikz"] or ["chemfig","tkz-tab"]. Pass an empty array to use core TikZ/PGF only.',
+        }),
+      ),
+    }),
+    execute: async (_id, args) => {
+      const ed = requireBridge(bridge);
+      const { valid, invalid } = validatePackageIds(args.packages);
+      if (invalid.length > 0) {
+        throw new Error(
+          `Unsupported package ids: ${invalid.join(", ")}. Supported: ${[...SUPPORTED_PACKAGE_IDS].join(", ")}.`,
+        );
+      }
+      ed.setPackages(valid);
+      return textBlocks(
+        `Enabled packages: ${valid.length > 0 ? valid.join(", ") : "(none — core TikZ/PGF only)"}. The preview is recompiling.`,
+      );
+    },
+  });
+
+  const getLibraries = tool({
+    name: "get_tikz_libraries",
+    label: "Read TikZ libraries",
+    description:
+      "Report the TikZ/PGF libraries currently selected for the open diagram. Use to check which libraries are enabled before drawing.",
+    parameters: Type.Object({}),
+    execute: async () => {
+      const ed = requireBridge(bridge);
+      const ids = ed.getLibraries();
+      return textBlocks(
+        ids.length > 0
+          ? `enabledLibraries: ${ids.join(", ")}`
+          : "enabledLibraries: (none)",
+      );
+    },
+  });
+
+  const setLibraries = tool({
+    name: "set_tikz_libraries",
+    label: "Set TikZ libraries",
+    description: `Select which TikZ/PGF libraries the current diagram needs (replaces \\usetikzlibrary in the source). Pass exact library ids; the preview recompiles automatically. Supported ids include: arrows.meta, positioning, calc, fit, automata, quotes, decorations.pathmorphing, decorations.markings, shapes.geometric, matrix, patterns, shadows. Call get_tikz_libraries or ask the user for the full bundled list.`,
+    parameters: Type.Object({
+      libraries: Type.Array(
+        Type.String({
+          description:
+            'Library ids to enable, e.g. ["arrows.meta","positioning"]. Pass an empty array to disable all.',
+        }),
+      ),
+    }),
+    execute: async (_id, args) => {
+      const ed = requireBridge(bridge);
+      const { valid, invalid } = validateLibraryIds(args.libraries);
+      if (invalid.length > 0) {
+        throw new Error(
+          `Unsupported library ids: ${invalid.join(", ")}. Use ids exactly as TikZ names them, e.g. "${[...SUPPORTED_LIBRARY_IDS].slice(0, 12).join('", "')}".`,
+        );
+      }
+      ed.setLibraries(valid);
+      return textBlocks(
+        `Enabled libraries: ${valid.length > 0 ? valid.join(", ") : "(none)"}. The preview is recompiling.`,
+      );
+    },
+  });
+
   return [
     getSource,
     getRenderStatus,
     setSource,
     saveVersion,
     loadSkill,
+    getPackages,
+    setPackages,
+    getLibraries,
+    setLibraries,
   ] as unknown as AgentTool[];
 }

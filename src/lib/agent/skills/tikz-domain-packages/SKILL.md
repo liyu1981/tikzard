@@ -5,15 +5,33 @@ description: Minimal working examples for the 8 non-core packages available in T
 
 # The 8 Domain Packages
 
-TikZard's WebAssembly engine bundles exactly eight extra packages. Load with
-`\usepackage{...}` on its own line above `\begin{tikzpicture}`. **No other
-package exists** - anything else always fails to compile; reimplement the
-need with core TikZ instead.
+TikZard's WebAssembly engine bundles exactly eight extra packages. Enable them
+with the **package selector** in the workbench UI (the package button next to
+version history) or by calling the `set_tikz_packages` tool — for example
+`set_tikz_packages(["circuitikz"])`.
+
+**Never write `\usepackage{...}` in the source.** Packages are applied to the
+diagram through the selection, not through preamble lines; `\usepackage` in the
+editor always fails. The editor content stays a clean, single tikzpicture.
+
+Supported ids (exactly these eight exist):
+
+| id | draws |
+| --- | --- |
+| `circuitikz` | electrical networks |
+| `chemfig` | 2D chemical structures |
+| `physics` | math/physics notation |
+| `tkz-tab` | sign and variation tables |
+| `yquant` | quantum circuits |
+| `tikz-feynhand` | Feynman diagrams |
+| `pgf-spectra` | continuous/discrete spectra |
+| `kinematikz` | kinematic mechanisms |
+
+Anything not on this list cannot be loaded — reimplement it with core TikZ.
 
 ## circuitikz - electrical networks
 
 ```latex
-\usepackage{circuitikz}
 \begin{tikzpicture}
   % battery in series with a resistor and an LED
   \draw (0,0) to[battery1] (0,2)
@@ -29,7 +47,6 @@ Common bipoles: `R`, `C`, `L`, `D`, `led`, `V`, `battery1`, `ammeter`,
 ## chemfig - 2D chemical structures
 
 ```latex
-\usepackage{chemfig}
 \begin{tikzpicture}
   % water molecule: O bonded to two H at 104 degree angle
   \chemfig{H-O-H}
@@ -42,7 +59,6 @@ for benzene.
 ## physics - math/physics notation
 
 ```latex
-\usepackage{physics}
 \begin{tikzpicture}
   % label showing the gradient and a bra-ket
   \node at (0,0) {$\grad \vec{f}, \quad \bra{\psi}\ket{\phi}$};
@@ -55,7 +71,6 @@ Macros: `\dv`, `\pdv`, `\abs`, `\norm`, `\bra`, `\ket`, `\braket`,
 ## tkz-tab - sign and variation tables
 
 ```latex
-\usepackage{tkz-tab}
 \begin{tikzpicture}
   % variation table of x^2: negative then positive, min at 0
   \tkzTabInit[lgt=2, espcl=3]{$x$ / 1, $f(x)$ / 2}{$0$, $3$}
@@ -66,7 +81,6 @@ Macros: `\dv`, `\pdv`, `\abs`, `\norm`, `\bra`, `\ket`, `\braket`,
 ## yquant - quantum circuits
 
 ```latex
-\usepackage{yquant}
 \begin{tikzpicture}
   % two qubit registers with a CNOT
   \qubit{$q_0$} q0;
@@ -78,7 +92,6 @@ Macros: `\dv`, `\pdv`, `\abs`, `\norm`, `\bra`, `\ket`, `\braket`,
 ## tikz-feynhand - Feynman diagrams
 
 ```latex
-\usepackage{tikz-feynhand}
 \begin{tikzpicture}
   % electron-positron annihilation into a photon
   \begin{feynhand}
@@ -93,7 +106,6 @@ Macros: `\dv`, `\pdv`, `\abs`, `\norm`, `\bra`, `\ket`, `\braket`,
 ## pgf-spectra - continuous/discrete spectra
 
 ```latex
-\usepackage{pgf-spectra}
 \begin{tikzpicture}
   % visible spectrum strip 380-780 nm
   \draw[spectra, wavelength=380:780] (0,0) rectangle (6,0.5);
@@ -103,7 +115,6 @@ Macros: `\dv`, `\pdv`, `\abs`, `\norm`, `\bra`, `\ket`, `\braket`,
 ## kinematikz - kinematic mechanisms
 
 ```latex
-\usepackage{kinematikz}
 \begin{tikzpicture}
   % four-bar linkage
   \fourbar{x}{y}{2}{1}{3}{45}
@@ -112,8 +123,11 @@ Macros: `\dv`, `\pdv`, `\abs`, `\norm`, `\bra`, `\ket`, `\braket`,
 
 ## Ground rules for all packages
 
-- One `\usepackage` per line above `\begin{tikzpicture}`; never inside it.
-- If compile fails after loading a package, read the forwarded compiler
-  output first - wrong macro names are the usual cause, not the package.
+- Select packages with the package selector or `set_tikz_packages`; never add
+  `\usepackage` lines to the source.
+- If a needed package is missing, call `get_tikz_packages` first, then enable
+  what you need before sending the source with `set_tikz_source`.
+- If compile fails after enabling a package, read the forwarded compiler output
+  first - wrong macro names are the usual cause, not the package.
 - Prefer core TikZ when a need is simple; reach for these packages only when
   the domain genuinely demands them.

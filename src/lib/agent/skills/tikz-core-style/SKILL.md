@@ -42,9 +42,10 @@ Pick from a small, consistent set; do not mix more than two weights per figure:
 
 ## Arrows and tips
 
-- Load `arrows.meta` (`\usetikzlibrary{arrows.meta}` is available in this
-  environment) and use `-{Stealth}` / `{Stealth[length=2.5mm]}` rather than
-  the old `->` default when a refined look matters.
+- Enable the `arrows.meta` library (via the TikZ Libraries input or the
+  `set_tikz_libraries` tool — never `\usetikzlibrary` in the source) and use
+  `-{Stealth}` / `{Stealth[length=2.5mm]}` rather than the old `->` default
+  when a refined look matters.
 - Put arrow specs on the path, not per-segment: `\draw[-{Stealth}] a -- b;`.
 
 ## Labels and text

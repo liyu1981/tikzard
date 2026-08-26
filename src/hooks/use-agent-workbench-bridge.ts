@@ -19,6 +19,10 @@ interface Props {
   renderSeqRef: React.RefObject<number>;
   ensureDocId: () => string;
   setCode: (code: string) => void;
+  getPackages: () => string[];
+  setPackages: (ids: string[]) => void;
+  getLibraries: () => string[];
+  setLibraries: (ids: string[]) => void;
   setNextVersionNo: (value: number) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }
@@ -30,6 +34,10 @@ export function useAgentWorkbenchBridge({
   renderSeqRef,
   ensureDocId,
   setCode,
+  getPackages,
+  setPackages,
+  getLibraries,
+  setLibraries,
   setNextVersionNo,
   t,
 }: Props): EditorMutationBridge {
@@ -41,6 +49,10 @@ export function useAgentWorkbenchBridge({
     return {
       getCode: () => codeRef.current,
       setCode,
+      getPackages,
+      setPackages,
+      getLibraries,
+      setLibraries,
       getRenderStatus: () => ({
         status: statusRef.current,
         durationMs: doneInfoMsRef.current,

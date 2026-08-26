@@ -15,6 +15,14 @@ export interface RenderStatusSnapshot {
 export interface EditorMutationBridge {
   getCode: () => string;
   setCode: (code: string) => void;
+  /** Currently enabled optional LaTeX package ids (see tikz-packages). */
+  getPackages: () => string[];
+  /** Replace the enabled optional LaTeX package ids for the open diagram. */
+  setPackages: (ids: string[]) => void;
+  /** Currently enabled TikZ/PGF library ids (see tikz-packages). */
+  getLibraries: () => string[];
+  /** Replace the enabled TikZ/PGF library ids for the open diagram. */
+  setLibraries: (ids: string[]) => void;
   getRenderStatus: () => RenderStatusSnapshot;
   /**
    * Persist the current editor source as a new version snapshot for the open

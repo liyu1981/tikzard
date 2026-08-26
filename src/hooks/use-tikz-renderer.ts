@@ -18,15 +18,25 @@ interface Props {
   code: string;
   stageRef: React.RefObject<HTMLDivElement | null>;
   t: (key: string, options?: Record<string, unknown>) => string;
+  packages: string[];
+  libraries: string[];
 }
 
-export function useTikzRenderer({ code, stageRef, t }: Props) {
+export function useTikzRenderer({
+  code,
+  stageRef,
+  t,
+  packages,
+  libraries,
+}: Props) {
   const [status, setStatus] = useState<Status>("booting");
   const [doneInfo, setDoneInfo] = useState<{ at: number; ms: number } | null>(
     null,
   );
   const [nowTick, setNowTick] = useState(() => Date.now());
   const lastRenderedCodeRef = useRef<string | null>(null);
+  const lastRenderedPackagesRef = useRef<string>("");
+  const lastRenderedLibrariesRef = useRef<string>("");
   const renderSeqRef = useRef(0);
   const renderStartRef = useRef(0);
   const statusRef = useRef(status);
@@ -54,16 +64,27 @@ export function useTikzRenderer({ code, stageRef, t }: Props) {
       host.replaceChildren();
       renderStartRef.current = performance.now();
       lastRenderedCodeRef.current = source;
+      lastRenderedPackagesRef.current = packages.join(",");
+      lastRenderedLibrariesRef.current = libraries.join(",");
       renderSeqRef.current += 1;
       setDoneInfo(null);
       setStatus("rendering");
       beginCompileLog(tRef.current("workbench.logStart"));
       const el = document.createElement("script");
       el.type = "text/tikz";
+      // TikZJax loads only the packages/libraries named here; the editor
+      // source stays a clean tikzpicture with no \usepackage or
+      // \usetikzlibrary noise.
+      if (packages.length > 0) {
+        el.setAttribute("data-tex-packages", packages.join(","));
+      }
+      if (libraries.length > 0) {
+        el.setAttribute("data-tikz-libraries", libraries.join(","));
+      }
       el.textContent = source;
       host.appendChild(el);
     },
-    [stageRef],
+    [stageRef, packages, libraries],
   );
 
   useEffect(() => {
@@ -90,8 +111,18 @@ export function useTikzRenderer({ code, stageRef, t }: Props) {
     if (
       status === "booting" ||
       status === "loadError" ||
-      status === "rendering" ||
-      code === lastRenderedCodeRef.current
+      status === "rendering"
+    ) {
+      return;
+    }
+    const packagesKey = packages.join(",");
+    const librariesKey = libraries.join(",");
+    // Skip only when neither the source nor the package/library selections
+    // changed.
+    if (
+      code === lastRenderedCodeRef.current &&
+      packagesKey === lastRenderedPackagesRef.current &&
+      librariesKey === lastRenderedLibrariesRef.current
     ) {
       return;
     }
@@ -100,7 +131,7 @@ export function useTikzRenderer({ code, stageRef, t }: Props) {
       AUTO_RENDER_DELAY_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [code, renderNow, status]);
+  }, [code, packages, libraries, renderNow, status]);
 
   useEffect(() => {
     setRenderFailureListener(() => setStatus("timeout"));

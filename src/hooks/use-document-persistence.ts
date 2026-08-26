@@ -17,6 +17,8 @@ interface Props {
   docTitle: string;
   currentDocId: string | null;
   status: Status;
+  packages: string[];
+  libraries: string[];
   canvasRef: React.RefObject<HTMLDivElement | null>;
   zoomRef: React.RefObject<number>;
   setCurrentDocId: (id: string) => void;
@@ -27,6 +29,8 @@ export function useDocumentPersistence({
   docTitle,
   currentDocId,
   status,
+  packages,
+  libraries,
   canvasRef,
   zoomRef,
   setCurrentDocId,
@@ -62,12 +66,22 @@ export function useDocumentPersistence({
         id,
         title: docTitle,
         code,
+        packages,
+        libraries,
         thumbnail: thumbnail ?? undefined,
         updatedAt: Date.now(),
       });
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [code, currentDocId, docTitle, setCurrentDocId, thumbnail]);
+  }, [
+    code,
+    currentDocId,
+    docTitle,
+    packages,
+    libraries,
+    setCurrentDocId,
+    thumbnail,
+  ]);
 
   useEffect(() => {
     if (currentDocId === null) {

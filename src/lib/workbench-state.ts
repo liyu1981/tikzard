@@ -48,6 +48,20 @@ export const currentDocIdAtom = atom<string | null>(null);
 export const leftTabAtom = atom<LeftTab>("assistant");
 
 /**
+ * Optional LaTeX packages selected for the open document, rendered into the
+ * TikZJax `<script type="text/tikz" data-tex-packages>` attribute. Empty means
+ * core TikZ/PGF only. Per-document, like the source, and persisted with it.
+ */
+export const packagesAtom = atom<string[]>([]);
+
+/**
+ * TikZ/PGF libraries selected for the open document, rendered into the
+ * `<script type="text/tikz" data-tikz-libraries>` attribute so the source
+ * itself never needs `\usetikzlibrary`. Per-document and persisted with it.
+ */
+export const librariesAtom = atom<string[]>([]);
+
+/**
  * An annotated preview snapshot waiting to be staged in the AI assistant
  * composer: the workbench produces the merged picture on "Finish", the chat
  * consumes it (fills the input text and replaces attachments, never sends)
