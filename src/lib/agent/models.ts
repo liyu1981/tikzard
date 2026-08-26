@@ -1,5 +1,6 @@
 import {
   type Api,
+  type CreateProviderOptions,
   type Credential,
   type CredentialInfo,
   type CredentialStore,
@@ -7,14 +8,18 @@ import {
   createProvider,
   type Model,
   type MutableModels,
+  type Provider,
 } from "@earendil-works/pi-ai";
+import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import { groqProvider } from "@earendil-works/pi-ai/providers/groq";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
 import { OPENROUTER_MODELS } from "@earendil-works/pi-ai/providers/openrouter.models";
+import { curateModels } from "./model-catalog";
 
 export const LOCAL_PROVIDER_ID = "local-openai";
 
@@ -336,7 +341,7 @@ function buildLocalProvider(baseUrl: string) {
   const v1Url = `${baseUrl}/v1`;
   return createProvider({
     id: LOCAL_PROVIDER_ID,
-    name: "OpenAI-compatible local LLM",
+    name: "Local LLM",
     baseUrl: v1Url,
     auth: {
       apiKey: {
@@ -370,6 +375,28 @@ interface OpenRouterModelDto {
  * fetchModels that pulls the live /models list; the static catalog is kept
  * only as an offline fallback. Auth config is reused from the original.
  */
+/**
+ * Rebuild a static-catalog provider with only its curated models. The
+ * upstream factories ship every model the vendor ever published; the wrapper
+ * keeps id, naming, baseUrl and auth but swaps in the filtered list. Static
+ * providers have no refreshModels, so this list is final — which is exactly
+ * what we want for the curated cloud catalogs.
+ */
+function curateProvider<TApi extends Api>(
+  base: Provider<TApi>,
+  api: CreateProviderOptions<TApi>["api"],
+): Provider<TApi> {
+  return createProvider({
+    id: base.id,
+    name: base.name,
+    baseUrl: base.baseUrl,
+    headers: base.headers,
+    auth: base.auth,
+    models: curateModels(base.id, base.getModels()),
+    api,
+  });
+}
+
 function buildOpenRouterProvider() {
   const base = openrouterProvider();
   return createProvider({
@@ -422,9 +449,15 @@ function buildOpenRouterProvider() {
             maxTokens: dto.top_provider?.max_completion_tokens ?? 8192,
           }))
           .sort((a, b) => a.id.localeCompare(b.id));
-        return mapped.length > 0 ? mapped : fallback();
+        // Both the live list and the static fallback go through the curated
+        // allowlist; an empty result after curation still counts as success.
+        const curated = curateModels(
+          "openrouter",
+          mapped.length > 0 ? mapped : fallback(),
+        );
+        return curated;
       } catch {
-        return fallback();
+        return curateModels("openrouter", fallback());
       }
     },
   });
@@ -433,11 +466,15 @@ function buildOpenRouterProvider() {
 function buildModels(): MutableModels {
   const models = createModels({ credentials: credentialStore });
   models.setProvider(buildLocalProvider(getLocalBaseUrl()));
-  models.setProvider(openaiProvider());
-  models.setProvider(anthropicProvider());
+  models.setProvider(curateProvider(openaiProvider(), openAIResponsesApi()));
+  models.setProvider(
+    curateProvider(anthropicProvider(), anthropicMessagesApi()),
+  );
   models.setProvider(buildOpenRouterProvider());
-  models.setProvider(deepseekProvider());
-  models.setProvider(groqProvider());
+  models.setProvider(
+    curateProvider(deepseekProvider(), openAICompletionsApi()),
+  );
+  models.setProvider(curateProvider(groqProvider(), openAICompletionsApi()));
   return models;
 }
 
