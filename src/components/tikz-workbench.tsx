@@ -288,6 +288,38 @@ export function TikzWorkbench() {
     [],
   );
 
+  // Annotation needs an <svg> node to draw into, but a fresh document has
+  // none until the first successful compile. Provision a blank placeholder
+  // sized to the preview content box so annotate mode works from the start;
+  // the layer's viewport logic then stretches its viewBox over the whole
+  // container. The next compile replaces it (renderNow clears the stage).
+  const ensurePlaceholderSvg = useCallback(() => {
+    const stage = stageRef.current;
+    const canvas = canvasRef.current;
+    if (!stage || !canvas || getPreviewSvg() !== null) {
+      return;
+    }
+    const style = window.getComputedStyle(canvas);
+    const width = Math.max(
+      1,
+      canvas.clientWidth -
+        Number.parseFloat(style.paddingLeft || "0") -
+        Number.parseFloat(style.paddingRight || "0"),
+    );
+    const height = Math.max(
+      1,
+      canvas.clientHeight -
+        Number.parseFloat(style.paddingTop || "0") -
+        Number.parseFloat(style.paddingBottom || "0"),
+    );
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("data-annotate-placeholder", "");
+    svg.setAttribute("width", String(width));
+    svg.setAttribute("height", String(height));
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    stage.replaceChildren(svg);
+  }, [getPreviewSvg]);
+
   // Finish annotation: the marks already live inside the rendered SVG, so
   // rasterizing it captures them directly; downscale to a vision-friendly
   // size and stage the snapshot in the assistant composer with a preset
@@ -928,9 +960,13 @@ export function TikzWorkbench() {
                 aria-label={t("workbench.annotate")}
                 title={t("workbench.annotate")}
                 aria-pressed={annotating}
-                disabled={status !== "done"}
-                onClick={() => setAnnotating((prev) => !prev)}
-                className={`rounded-full border border-border/50 bg-background/70 p-1.5 shadow-sm backdrop-blur-md transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-40 ${
+                onClick={() => {
+                  if (!annotating) {
+                    ensurePlaceholderSvg();
+                  }
+                  setAnnotating((prev) => !prev);
+                }}
+                className={`rounded-full border border-border/50 bg-background/70 p-1.5 shadow-sm backdrop-blur-md transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95] ${
                   annotating
                     ? "bg-primary/15 text-primary"
                     : "text-muted-foreground"

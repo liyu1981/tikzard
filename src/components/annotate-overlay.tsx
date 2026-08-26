@@ -278,6 +278,8 @@ interface SavedViewport {
   artwork: SVGGElement;
   artworkWidth: number;
   artworkHeight: number;
+  /** False when the typeset box was empty (fresh/failed document). */
+  hasArtwork: boolean;
   originalViewBox: { x: number; y: number; width: number; height: number };
 }
 
@@ -339,10 +341,6 @@ function updateAnnotationViewport(saved: SavedViewport, host: HTMLElement) {
   const availableHeight = Math.max(1, (edge.bottom - edge.top) / zoom);
   const stageWidth = Math.max(availableWidth, saved.artworkWidth);
   const stageHeight = Math.max(availableHeight, saved.artworkHeight);
-  const scaleX = saved.artworkWidth / originalViewBox.width;
-  const scaleY = saved.artworkHeight / originalViewBox.height;
-  const offsetX = (stageWidth - saved.artworkWidth) / 2;
-  const offsetY = (stageHeight - saved.artworkHeight) / 2;
 
   stage.style.width = `${stageWidth}px`;
   stage.style.height = `${stageHeight}px`;
@@ -354,6 +352,20 @@ function updateAnnotationViewport(saved: SavedViewport, host: HTMLElement) {
   svg.style.height = "100%";
   svg.style.maxWidth = "none";
   svg.style.maxHeight = "none";
+  if (
+    !saved.hasArtwork ||
+    originalViewBox.width <= 0 ||
+    originalViewBox.height <= 0
+  ) {
+    // Nothing typeset: leave the (empty) artwork group untransformed rather
+    // than writing a NaN scale from the 0/0 box mapping.
+    artwork.removeAttribute("transform");
+    return;
+  }
+  const scaleX = saved.artworkWidth / originalViewBox.width;
+  const scaleY = saved.artworkHeight / originalViewBox.height;
+  const offsetX = (stageWidth - saved.artworkWidth) / 2;
+  const offsetY = (stageHeight - saved.artworkHeight) / 2;
   artwork.setAttribute(
     "transform",
     `translate(${fx(offsetX - originalViewBox.x * scaleX)} ${fx(offsetY - originalViewBox.y * scaleY)}) scale(${fx(scaleX)} ${fx(scaleY)})`,
@@ -364,23 +376,19 @@ function updateAnnotationViewport(saved: SavedViewport, host: HTMLElement) {
  * Turn the generated root svg into a full-stage annotation surface. The
  * original rendered children are placed in a transformed artwork group, so
  * the generated TikZ coordinate system remains intact while the root viewBox
- * becomes panel-sized.
+ * becomes panel-sized. A degenerate 0×0 svg (empty TikZ output for a fresh
+ * document) is not an error: it becomes an empty canvas and the surface
+ * grows to the whole container.
  */
 function createAnnotationViewport(
   svg: SVGSVGElement,
   host: HTMLElement,
   stage: HTMLDivElement,
-): SavedViewport | null {
+): SavedViewport {
   const box = svg.viewBox.baseVal;
   const svgRect = svg.getBoundingClientRect();
-  if (
-    box.width <= 0 ||
-    box.height <= 0 ||
-    svgRect.width <= 0 ||
-    svgRect.height <= 0
-  ) {
-    return null;
-  }
+  const hasArtwork =
+    box.width > 0 && box.height > 0 && svgRect.width > 0 && svgRect.height > 0;
   const originalChildren = Array.from(svg.childNodes);
   const artwork = document.createElementNS(SVG_NS, "g");
   artwork.setAttribute("data-tikz-artwork", "");
@@ -413,8 +421,9 @@ function createAnnotationViewport(
     stageStyle: stage.getAttribute("style") ?? "",
     originalChildren,
     artwork,
-    artworkWidth: svgRect.width / stageZoom(stage),
-    artworkHeight: svgRect.height / stageZoom(stage),
+    artworkWidth: hasArtwork ? svgRect.width / stageZoom(stage) : 0,
+    artworkHeight: hasArtwork ? svgRect.height / stageZoom(stage) : 0,
+    hasArtwork,
     originalViewBox: {
       x: box.x,
       y: box.y,
