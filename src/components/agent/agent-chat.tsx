@@ -18,16 +18,20 @@ import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { buildAgent } from "@/lib/agent/agent";
 import {
+  COMPACT_THRESHOLD,
   ensureContextCapacity,
+  measureContext,
   parseContextOverflow,
   storeObservedContextLimit,
 } from "@/lib/agent/context";
@@ -46,10 +50,8 @@ import {
   resolveModel,
 } from "@/lib/agent/models";
 import {
-  formatSkillPayload,
   formatSkillsForSystemPrompt,
   getBundledSkills,
-  getSkillByName,
 } from "@/lib/agent/skills";
 import {
   type AgentSession,
@@ -66,6 +68,7 @@ import {
   pushCompileLog,
 } from "@/lib/compile-logs";
 import { leftTabAtom, pendingAnnotationAtom } from "@/lib/workbench-state";
+import { AgentSetupDialog } from "./agent-setup-dialog";
 import {
   BotIcon,
   CheckIcon,
@@ -129,6 +132,17 @@ function readLastModel(): { providerId: string; modelId: string } | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Compact token count for the context indicator: 1234 -> "1.2k". */
+function formatTokens(count: number): string {
+  if (count >= 100000) {
+    return `${Math.round(count / 1000)}k`;
+  }
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}k`;
+  }
+  return String(count);
 }
 
 /** Last thinking level the user picked, validated against known levels. */
@@ -816,19 +830,6 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
     [buildSystemPrompt, createNewSession, persistSession, promptGuarded, t],
   );
 
-  /** Manual skill invocation (pi's /skill:name): send the full skill
-      instructions as the user message so the agent follows them now. */
-  const invokeSkill = useCallback(
-    (name: string) => {
-      const skill = getSkillByName(name);
-      if (skill === undefined || streamingRef.current) {
-        return;
-      }
-      void runUserTurn(formatSkillPayload(skill), `/skill:${name}`);
-    },
-    [runUserTurn],
-  );
-
   const allModels = listAvailableModels();
   // Before any session exists, the selectors still surface the remembered
   // model/thinking preferences — what the next conversation will use. The
@@ -857,6 +858,20 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
   /** Whether the model that would send the next message accepts images. */
   const imagesSupported =
     selectedModel !== undefined && supportsImageInput(selectedModel.model);
+
+  /** Live context-window usage of the active conversation (undefined while
+      no session exists — there is nothing to measure yet). */
+  const contextMeasure = useMemo(
+    () =>
+      selectedModel !== undefined && latest !== undefined
+        ? measureContext(
+            selectedModel.model,
+            latest.systemPrompt ?? "",
+            latest.messages,
+          )
+        : undefined,
+    [selectedModel, latest],
+  );
 
   /** Convert picked/pasted/dropped files into staged attachments, surfacing
       the first failure reason (i18n key) when anything is rejected. */
@@ -915,9 +930,24 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
 
   const handleComposerPaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      if (event.clipboardData.files.length > 0) {
+      const data = event.clipboardData;
+      if (data.files.length > 0) {
         event.preventDefault();
-        addImageFiles(event.clipboardData.files);
+        addImageFiles(data.files);
+        return;
+      }
+      // Screenshot tools and some clipboard sources (Linux/Wayland
+      // managers, web-page copies) expose the image only as a clipboard
+      // item, leaving .files empty — collect those blobs directly.
+      const files = Array.from(data.items)
+        .filter(
+          (item) => item.kind === "file" && item.type.startsWith("image/"),
+        )
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+      if (files.length > 0) {
+        event.preventDefault();
+        addImageFiles(files);
       }
     },
     [addImageFiles],
@@ -1205,38 +1235,7 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
           {t("agent.title")}
         </span>
         <div className="flex items-center gap-0.5">
-          {getBundledSkills().length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label={t("agent.skills")}
-                title={t("agent.skills")}
-                disabled={streaming}
-                className={iconBtnStrong}
-              >
-                <SparklesIcon className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="text-xs">
-                <DropdownMenuLabel>{t("agent.skills")}</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {getBundledSkills().map((skill) => (
-                  <DropdownMenuItem
-                    key={skill.name}
-                    disabled={streaming}
-                    onSelect={() => invokeSkill(skill.name)}
-                  >
-                    <span className="min-w-0">
-                      <span className="block font-medium">
-                        /skill:{skill.name}
-                      </span>
-                      <span className="block truncate text-muted-foreground">
-                        {skill.description}
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <AgentSetupDialog disabled={streaming} />
           <button
             type="button"
             onClick={() => void createNewSession()}
@@ -1520,6 +1519,48 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          {contextMeasure !== undefined && (
+            <div className="flex w-32 shrink-0 flex-col gap-0.5">
+              <span className="pl-0.5 text-[0.65rem] font-medium text-muted-foreground">
+                {t("agent.contextField")}
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    id="agent-context-usage"
+                    className="flex h-8 items-center gap-1.5 rounded-lg border border-border/50 bg-background/50 px-2 text-xs outline-none transition duration-150 hover:brightness-[1.06] focus-visible:border-ring aria-expanded:brightness-110"
+                  >
+                    <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-foreground/10">
+                      <div
+                        className={`h-full transition-[width] duration-300 ${
+                          contextMeasure.ratio >= 0.9
+                            ? "bg-red-500"
+                            : contextMeasure.ratio >= COMPACT_THRESHOLD
+                              ? "bg-amber-500"
+                              : "bg-emerald-500"
+                        }`}
+                        style={{
+                          width: `${Math.min(100, Math.max(3, contextMeasure.ratio * 100))}%`,
+                        }}
+                      />
+                    </div>
+                    <span className="shrink-0 font-mono text-[0.65rem] tabular-nums text-muted-foreground">
+                      {formatTokens(contextMeasure.tokens)} /{" "}
+                      {formatTokens(contextMeasure.limit)}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-60">
+                  {t("agent.contextUsageHint", {
+                    percent: Math.round(contextMeasure.ratio * 100),
+                    tokens: contextMeasure.tokens,
+                    limit: contextMeasure.limit,
+                    threshold: Math.round(COMPACT_THRESHOLD * 100),
+                  })}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          )}
         </div>
         <form
           onSubmit={(event) => {

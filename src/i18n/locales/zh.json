@@ -7,7 +7,6 @@
   "settings": {
     "title": "设置",
     "tabAI": "LLM 设置",
-    "tabAgentSetup": "智能体设置",
     "tabSystem": "系统",
     "themeLabel": "外观",
     "tabAbout": "关于",
@@ -16,7 +15,6 @@
     "aboutBlurb": "TikZard 是一个本地优先的 TikZ 工作台：所有编译都在浏览器本地完成。",
     "aboutLocal": "无需服务器、无需账号——你的图形与对话仅保存在本设备上。",
     "aboutAgent": "AI 助手自带密钥（BYOK）：凭据只保存在本浏览器中，并直接连接你选择的提供商。",
-    "agentSetupHint": "每个新会话都会发送给 AI 助手的基础系统提示词；回答语言的指令跟随界面语言。发送消息时还会附上当前 TikZ 源码，让模型看到你的图形。",
     "tabStorage": "存储",
     "maxVersionsLabel": "每个文档的最大版本数",
     "maxVersionsHint": "当文档超过此上限时，最旧的快照会被删除。"
@@ -105,7 +103,10 @@
     "title": "AI 助手",
     "close": "关闭",
     "newChat": "新对话",
-    "skills": "技能",
+    "setupTitle": "智能体设置",
+    "tabSystemPrompt": "系统提示词",
+    "tabSkills": "技能",
+    "systemPromptHint": "每个新会话都会发送给 AI 助手的基础系统提示词；回答语言的指令跟随界面语言。发送消息时还会附上当前 TikZ 源码，让模型看到你的图形。",
     "deleteChat": "删除此对话",
     "active": "当前",
     "untitled": "新对话",
@@ -173,6 +174,8 @@
     "refreshModels": "模型列表",
     "refresh": "刷新",
     "modelsRefreshed": "模型列表已刷新。",
+    "contextField": "上下文",
+    "contextUsageHint": "已用模型上下文窗口的 {{percent}}%（约 {{tokens}} / {{limit}} tokens）。超过 {{threshold}}% 后，最早的对话会自动折叠为摘要。",
     "autoFixMessage": "TikZ 预览编译失败。编译输出：\n{{logs}}\n\n请修复源码，并调用 set_tikz_source 提交完整修正后的 tikzpicture。",
     "autoFixLimitReached": "连续 {{count}} 次编译失败后已暂停自动修复——请自行检查源码，或发送消息继续。"
   },

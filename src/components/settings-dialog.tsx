@@ -15,7 +15,6 @@ import {
   InfoIcon,
   PackageIcon,
   SettingsIcon,
-  SparklesIcon,
   XIcon,
 } from "@/components/agent/icons";
 import { useTheme } from "@/components/theme-provider";
@@ -28,7 +27,7 @@ import type { Theme } from "@/lib/theme";
 import { getMaxVersions, setMaxVersions } from "@/lib/versions";
 import pkg from "../../package.json";
 
-type SettingsTab = "ai" | "setup" | "system" | "storage" | "about";
+type SettingsTab = "ai" | "system" | "storage" | "about";
 
 /**
  * Shared request channel so controls outside this component (e.g. the page
@@ -169,28 +168,6 @@ function StorageSettings() {
   );
 }
 
-/**
- * Shows the base system prompt sent to the pi-agent in every new session.
- * The {{language}} placeholder is filled exactly as agent-chat does at
- * session creation, so this is the text the model actually receives.
- */
-function AgentSetupPanel() {
-  const { t, i18n } = useTranslation();
-  const language = i18n.language?.startsWith("zh") ? "Chinese" : "English";
-  const prompt = t("agent.systemPrompt", { language });
-
-  return (
-    <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">
-        {t("settings.agentSetupHint")}
-      </p>
-      <pre className="max-h-[26rem] overflow-y-auto whitespace-pre-wrap rounded-xl border border-border/40 bg-background/30 p-3 font-sans text-xs leading-relaxed">
-        {prompt}
-      </pre>
-    </div>
-  );
-}
-
 function AboutPanel() {
   const { t } = useTranslation();
 
@@ -229,9 +206,9 @@ function AboutPanel() {
 
 /**
  * Page-level Settings dialog: a fixed-size card with a vertical tab rail on
- * the left (AI assistant / agent setup / system / storage / about) and the
- * active panel on the right, so switching tabs never resizes the dialog.
- * The trigger sits in the top-right controls of the header.
+ * the left (AI assistant / system / storage / about) and the active panel on
+ * the right, so switching tabs never resizes the dialog. The trigger sits in
+ * the top-right controls of the header.
  */
 export function SettingsDialog() {
   const { t } = useTranslation();
@@ -270,7 +247,6 @@ export function SettingsDialog() {
     Icon: ComponentType<{ className?: string }>;
   }[] = [
     { id: "ai", labelKey: "settings.tabAI", Icon: BotIcon },
-    { id: "setup", labelKey: "settings.tabAgentSetup", Icon: SparklesIcon },
     { id: "system", labelKey: "settings.tabSystem", Icon: GlobeIcon },
     { id: "storage", labelKey: "settings.tabStorage", Icon: PackageIcon },
     { id: "about", labelKey: "settings.tabAbout", Icon: InfoIcon },
@@ -349,14 +325,6 @@ export function SettingsDialog() {
                   >
                     <AgentSettings />
                   </div>
-                  {tab === "setup" && (
-                    <div
-                      role="tabpanel"
-                      aria-label={t("settings.tabAgentSetup")}
-                    >
-                      <AgentSetupPanel />
-                    </div>
-                  )}
                   {tab === "system" && (
                     <div role="tabpanel" aria-label={t("settings.tabSystem")}>
                       <SystemSettings />
