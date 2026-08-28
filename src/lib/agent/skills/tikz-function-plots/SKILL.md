@@ -8,6 +8,17 @@ description: Recipes for drawing function graphs (parabolas, trigonometric curve
 This environment has **no pgfplots**. Plot with core `\draw plot` and draw
 axes manually. Never emit `\begin{axis}` or `\addplot` — it always fails.
 
+## Packages and libraries
+
+Function plots use plain TikZ — no special packages are needed. However,
+TikZ libraries can enhance your plots:
+
+- `arrows.meta` for refined arrow tips on axes
+- `decorations.pathmorphing` for wavy/zigzag lines
+
+Set libraries via `set_tikz_libraries`; check current selection with
+`get_tikz_libraries`. **Never write `\usetikzlibrary{...}` in the source.**
+
 ## Standard skeleton
 
 ```latex

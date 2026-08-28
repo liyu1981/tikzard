@@ -8,6 +8,19 @@ description: Visual style and quality guide for TikZ figures in TikZard - line w
 Produce clean, precise, consistent figures. Every rule below is checked against
 how TikZard renders: one `tikzpicture`, compiled by WebAssembly TikZJax.
 
+## Packages and libraries
+
+Optional LaTeX packages and TikZ libraries are loaded through the UI tools, not
+through source lines:
+
+- **Packages**: Use `set_tikz_packages` (e.g. `set_tikz_packages(["circuitikz"])`).
+  Check current selection with `get_tikz_packages`.
+- **Libraries**: Use `set_tikz_libraries` (e.g. `set_tikz_libraries(["arrows.meta", "positioning"])`).
+  Check current selection with `get_tikz_libraries`.
+
+**Never write `\usepackage{...}` or `\usetikzlibrary{...}` in the source.**
+The editor content stays a clean, single tikzpicture.
+
 ## Structure and comments
 
 - Emit exactly one `tikzpicture`. No `\documentclass`, no wrappers.

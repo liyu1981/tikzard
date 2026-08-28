@@ -16,6 +16,9 @@ the workbench UI or by calling the `set_tikz_libraries` tool — for example
 Libraries and packages are applied through the selection, not through source
 lines; the editor content stays a clean, single tikzpicture.
 
+**Always check first**: Call `get_tikz_libraries` before enabling libraries to
+see what is already active.
+
 ## Relative placement (never hardcode coordinates)
 
 ```latex

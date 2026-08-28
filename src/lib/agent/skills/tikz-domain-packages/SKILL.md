@@ -125,9 +125,13 @@ Macros: `\dv`, `\pdv`, `\abs`, `\norm`, `\bra`, `\ket`, `\braket`,
 
 - Select packages with the package selector or `set_tikz_packages`; never add
   `\usepackage` lines to the source.
-- If a needed package is missing, call `get_tikz_packages` first, then enable
-  what you need before sending the source with `set_tikz_source`.
+- **Always check first**: Call `get_tikz_packages` before enabling packages to
+  avoid duplicates or conflicts.
+- If a needed package is missing, enable it with `set_tikz_packages` before
+  sending the source with `set_tikz_source`.
 - If compile fails after enabling a package, read the forwarded compiler output
   first - wrong macro names are the usual cause, not the package.
 - Prefer core TikZ when a need is simple; reach for these packages only when
   the domain genuinely demands them.
+- Libraries (like `arrows.meta`, `positioning`) are separate from packages and
+  set via `set_tikz_libraries`.
