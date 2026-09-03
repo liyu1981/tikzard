@@ -37,9 +37,7 @@ import {
   currentDocIdAtom,
   docTitleAtom,
   entryGateAtom,
-  librariesAtom,
   NEW_DOCUMENT_CODE,
-  packagesAtom,
 } from "@/lib/workbench-state";
 
 /** Documents shown per page in the 3×3 gallery grid. */
@@ -222,8 +220,6 @@ function DocThumb({ url }: { url?: string }) {
 export function OpenDocumentMenu() {
   const { t } = useTranslation();
   const setCode = useSetAtom(codeAtom);
-  const setPackages = useSetAtom(packagesAtom);
-  const setLibraries = useSetAtom(librariesAtom);
   const setDocTitle = useSetAtom(docTitleAtom);
   const setCurrentDocId = useSetAtom(currentDocIdAtom);
   const currentDocId = useAtomValue(currentDocIdAtom);
@@ -271,8 +267,6 @@ export function OpenDocumentMenu() {
   // on its next tick. Also dismiss the welcome page if it was showing.
   function handleNew() {
     setCode(NEW_DOCUMENT_CODE);
-    setPackages([]);
-    setLibraries([]);
     setDocTitle(t("documents.untitled"));
     setCurrentDocId(null);
     setLastOpenedDocId(null);
@@ -285,8 +279,6 @@ export function OpenDocumentMenu() {
       return;
     }
     setCode(doc.code);
-    setPackages(doc.packages ?? []);
-    setLibraries(doc.libraries ?? []);
     setDocTitle(doc.title);
     setCurrentDocId(doc.id);
     setLastOpenedDocId(doc.id);
@@ -381,8 +373,6 @@ export function OpenDocumentMenu() {
     const last = imported.at(-1);
     if (last !== undefined) {
       setCode(last.code);
-      setPackages(last.packages ?? []);
-      setLibraries(last.libraries ?? []);
       setDocTitle(last.title);
       setCurrentDocId(last.id);
       setLastOpenedDocId(last.id);

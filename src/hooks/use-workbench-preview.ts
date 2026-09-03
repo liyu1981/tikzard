@@ -5,7 +5,6 @@ import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Status } from "@/components/workbench-types";
 import { blobToImageContent } from "@/lib/agent/images";
-import { pushCompileLog } from "@/lib/compile-logs";
 import {
   annotatedSnapshotBlob,
   downloadBlob,
@@ -116,11 +115,10 @@ export function useWorkbenchPreview({
             promptText: tRef.current("agent.annotatedPrompt"),
           });
           setLeftTab("assistant");
-          pushCompileLog("info", tRef.current("workbench.annotateAttached"));
         })
-        .catch(() =>
-          pushCompileLog("error", tRef.current("workbench.exportFailed")),
-        );
+        .catch(() => {
+          // Export failed silently
+        });
     },
     [getPreviewSvg, setLeftTab, setPendingAnnotation],
   );
@@ -132,12 +130,9 @@ export function useWorkbenchPreview({
       if (!svg) return;
       setExporting(true);
       try {
-        pushCompileLog(
-          "info",
-          tRef.current("workbench.exportDone", { detail: await action(svg) }),
-        );
+        await action(svg);
       } catch {
-        pushCompileLog("error", tRef.current("workbench.exportFailed"));
+        // Export failed silently
       } finally {
         setExporting(false);
       }

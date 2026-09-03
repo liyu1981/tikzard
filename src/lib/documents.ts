@@ -11,10 +11,6 @@ export interface TikzDocument {
   title: string;
   code: string;
   updatedAt: number;
-  /** Optional LaTeX packages enabled for this document (see tikz-packages). */
-  packages?: string[];
-  /** TikZ/PGF libraries enabled for this document (see tikz-packages). */
-  libraries?: string[];
   /** Downscaled PNG snapshot of the rendered result (≤640px longest side). */
   thumbnail?: Blob;
 }
@@ -27,7 +23,7 @@ export interface TikzDocumentMeta {
 }
 
 export const DB_NAME = "tikzard";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 export const DOCUMENTS_STORE_NAME = "documents";
 export const VERSIONS_STORE_NAME = "versions";
 

@@ -8,20 +8,20 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "TikZard | Local-first TikZ editor",
+    default: "TikZard | Local-first JSXGraph editor",
     template: "%s | TikZard",
   },
   description:
-    "Create, preview, annotate, and export TikZ diagrams in a private, local-first web workbench.",
+    "Create, preview, annotate, and export interactive JSXGraph diagrams in a private, local-first web workbench.",
   applicationName: "TikZard",
   authors: [{ name: "TikZard" }],
   creator: "TikZard",
   publisher: "TikZard",
   category: "technology",
   keywords: [
-    "TikZ editor",
-    "LaTeX diagrams",
-    "TikZ preview",
+    "JSXGraph editor",
+    "interactive geometry",
+    "mathematical visualization",
     "diagram editor",
     "local-first",
     "offline-first",
@@ -31,18 +31,18 @@ export const metadata: Metadata = {
     apple: "/icon.svg",
   },
   openGraph: {
-    title: "TikZard | Local-first TikZ editor",
+    title: "TikZard | Local-first JSXGraph editor",
     description:
-      "Create, preview, annotate, and export TikZ diagrams in a private, local-first web workbench.",
+      "Create, preview, annotate, and export interactive JSXGraph diagrams in a private, local-first web workbench.",
     siteName: "TikZard",
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "TikZard | Local-first TikZ editor",
+    title: "TikZard | Local-first JSXGraph editor",
     description:
-      "Create, preview, annotate, and export TikZ diagrams in a private, local-first web workbench.",
+      "Create, preview, annotate, and export interactive JSXGraph diagrams in a private, local-first web workbench.",
   },
   robots: {
     index: true,
@@ -55,7 +55,7 @@ const structuredData = {
   "@type": "WebApplication",
   name: "TikZard",
   description:
-    "A private, local-first web workbench for creating, previewing, annotating, and exporting TikZ diagrams.",
+    "A private, local-first web workbench for creating, previewing, annotating, and exporting interactive JSXGraph diagrams.",
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Web Browser",
   browserRequirements: "Requires JavaScript",
@@ -65,8 +65,8 @@ const structuredData = {
     priceCurrency: "USD",
   },
   featureList: [
-    "TikZ source editing",
-    "Live SVG preview",
+    "JSXGraph source editing",
+    "Interactive live preview",
     "Diagram annotations",
     "PNG and PDF export",
     "Local document storage",
@@ -88,7 +88,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="stylesheet" href="/tikzjax/fonts.min.css" />
         <script
           type="application/ld+json"
           // biome-ignore lint/security/noDangerouslySetInnerHtml: structured data is a static local object

@@ -11,11 +11,11 @@
     "dev": "next dev --webpack -p 3111 --experimental-https --experimental-https-key ./mkcert/localhost+3-key.pem --experimental-https-cert ./mkcert/localhost+3.pem",
     "dev:serve": "bash scripts/dev-serve.sh",
     "dev:stop": "bash scripts/dev-stop.sh",
-    "build": "bash scripts/copy-tikzjax.sh && next build --webpack",
+    "build": "next build --webpack",
     "start": "next start -p 4000",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "postinstall": "bash scripts/copy-tikzjax.sh"
+    "postinstall": "echo 'ready'"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.84.3",
@@ -23,13 +23,13 @@
     "@next/third-parties": "^16.3.3",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@radix-ui/react-tooltip": "^1.2.16",
-    "@rod2ik/tikzjax": "^1.6.0",
     "clsx": "^2.1.1",
     "fflate": "^0.8.3",
     "highlight.js": "^11.12.0",
     "i18next": "^26.4.0",
     "i18next-browser-languagedetector": "^8.2.1",
     "jotai": "^2.20.3",
+    "jsxgraph": "^1.13.2",
     "next": "^16.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

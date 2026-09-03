@@ -1,29 +1,19 @@
-export type Status =
-  | "booting"
-  | "ready"
-  | "rendering"
-  | "done"
-  | "timeout"
-  | "loadError";
+export type Status = "ready" | "rendering" | "done" | "error";
 
 export type RightTab = "preview" | "logs";
 
 export const STATUS_KEY: Record<Status, string> = {
-  booting: "workbench.statusBooting",
   ready: "workbench.statusReady",
   rendering: "workbench.statusRendering",
   done: "workbench.statusDone",
-  timeout: "workbench.statusTimeout",
-  loadError: "workbench.statusLoadError",
+  error: "workbench.statusError",
 };
 
 export const STATUS_DOT: Record<Status, string> = {
-  booting: "bg-neutral-400",
   ready: "bg-emerald-500",
   rendering: "animate-pulse bg-amber-500",
   done: "bg-emerald-500",
-  timeout: "bg-red-500",
-  loadError: "bg-red-500",
+  error: "bg-red-500",
 };
 
 export function formatDuration(ms: number): string {

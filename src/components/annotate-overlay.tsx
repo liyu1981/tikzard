@@ -12,11 +12,11 @@ import {
 } from "@/components/agent/icons";
 
 /**
- * Annotation layer drawn straight into the TikZJax-rendered preview <svg>:
+ * Annotation layer drawn straight into the JSXGraph-rendered preview <svg>:
  * freehand strokes, rectangle/ellipse/arrow shapes, and text labels become
  * real SVG nodes inside a dedicated <g data-annotation-layer> group appended
  * to the artwork svg. Marks therefore live in the artwork's own coordinate
- * system (pt user units) — they stay registered at any zoom or panel size,
+ * system — they stay registered at any zoom or panel size,
  * and ride along when the svg is cloned and serialized for the annotated
  * snapshot; no compositing math is needed.
  *
@@ -29,11 +29,10 @@ import {
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /**
- * Font for committed text labels. Must be one of the families vendored under
- * /tikzjax/fonts so the export rasterizer can inline it as base64 @font-face
- * (standalone SVGs loaded via <img> cannot fetch external resources).
+ * Font for committed text labels. JSXGraph uses standard web fonts,
+ * so we can use a common sans-serif family for annotations.
  */
-const ANNOTATE_FONT_FAMILY = "cmr10";
+const ANNOTATE_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 
 /** Marker palette offered in the toolbar (contrast-safe on white previews). */
 const ANNOTATE_COLORS = [

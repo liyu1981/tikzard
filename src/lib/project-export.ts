@@ -12,7 +12,8 @@ export interface ProjectExportDocument {
 
 export interface ProjectExportPayload {
   app: "tikzard";
-  exportVersion: 1;
+  exportVersion: 2;
+  engine: "jsxgraph";
   exportedAt: number;
   document: ProjectExportDocument;
   versions: {
@@ -33,7 +34,8 @@ export function downloadProjectJson(
 ): string {
   const payload: ProjectExportPayload = {
     app: "tikzard",
-    exportVersion: 1,
+    exportVersion: 2,
+    engine: "jsxgraph",
     exportedAt: Date.now(),
     document,
     versions: versions.map((v) => ({

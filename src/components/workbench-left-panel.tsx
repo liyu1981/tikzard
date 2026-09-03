@@ -3,8 +3,7 @@
 import { useTranslation } from "react-i18next";
 import { AgentChat } from "@/components/agent/agent-chat";
 import { CheckIcon, HistoryIcon } from "@/components/agent/icons";
-import { type TagSuggestion, TexTagInput } from "@/components/tex-tag-input";
-import { TikzEditor } from "@/components/tikz-editor";
+import { CodeEditor } from "@/components/code-editor";
 import {
   Tooltip,
   TooltipContent,
@@ -23,17 +22,11 @@ interface Props {
   nextVersionNo: number | null;
   saveVersionState: "idle" | "saving" | "saved";
   versionsOpen: boolean;
-  packages: string[];
-  libraries: string[];
-  packageSuggestions: TagSuggestion[];
-  librarySuggestions: TagSuggestion[];
   onCodeChange: (code: string) => void;
   onLeftTabChange: (tab: LeftTab) => void;
   onRender: () => void;
   onSaveVersion: () => void;
   onVersionsOpenChange: (open: boolean) => void;
-  onPackagesChange: (ids: string[]) => void;
-  onLibrariesChange: (ids: string[]) => void;
   onRestoreVersion: Parameters<typeof VersionBrowser>[0]["onRestore"];
 }
 
@@ -49,17 +42,11 @@ export function WorkbenchLeftPanel({
   nextVersionNo,
   saveVersionState,
   versionsOpen,
-  packages,
-  libraries,
-  packageSuggestions,
-  librarySuggestions,
   onCodeChange,
   onLeftTabChange,
   onRender,
   onSaveVersion,
   onVersionsOpenChange,
-  onPackagesChange,
-  onLibrariesChange,
   onRestoreVersion,
 }: Props) {
   const { t } = useTranslation();
@@ -105,25 +92,7 @@ export function WorkbenchLeftPanel({
         </Tooltip>
       </div>
       <div className={leftTab === "instruction" ? "contents" : "hidden"}>
-        <TexTagInput
-          label={t("workbench.packages")}
-          placeholder={t("workbench.packagesPlaceholder")}
-          removeLabel={(id) => t("workbench.packagesRemove", { id })}
-          genericDescription=""
-          suggestions={packageSuggestions}
-          selected={packages}
-          onChange={onPackagesChange}
-        />
-        <TexTagInput
-          label={t("workbench.libraries")}
-          placeholder={t("workbench.librariesPlaceholder")}
-          removeLabel={(id) => t("workbench.librariesRemove", { id })}
-          genericDescription={t("workbench.libraryGeneric")}
-          suggestions={librarySuggestions}
-          selected={libraries}
-          onChange={onLibrariesChange}
-        />
-        <TikzEditor value={code} onChange={onCodeChange} />
+        <CodeEditor value={code} onChange={onCodeChange} />
         <div className="flex h-9 shrink-0 items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <button

@@ -1,5 +1,7 @@
+"use client";
+
 /**
- * Bridge from the agent's write tools into the live TikzWorkbench UI state.
+ * Bridge from the agent's write tools into the live Workbench UI state.
  *
  * The agent has NO backend write tools. It mutates the open workbench's
  * source through this interface only — changes land in the editor and the
@@ -8,22 +10,19 @@
  * gate, by product decision.
  */
 export interface RenderStatusSnapshot {
-  status: "booting" | "ready" | "rendering" | "done" | "timeout" | "loadError";
+  status: "ready" | "rendering" | "done" | "error";
   durationMs: number | null;
 }
 
 export interface EditorMutationBridge {
   getCode: () => string;
   setCode: (code: string) => void;
-  /** Currently enabled optional LaTeX package ids (see tikz-packages). */
-  getPackages: () => string[];
-  /** Replace the enabled optional LaTeX package ids for the open diagram. */
-  setPackages: (ids: string[]) => void;
-  /** Currently enabled TikZ/PGF library ids (see tikz-packages). */
-  getLibraries: () => string[];
-  /** Replace the enabled TikZ/PGF library ids for the open diagram. */
-  setLibraries: (ids: string[]) => void;
   getRenderStatus: () => RenderStatusSnapshot;
+  /**
+   * Get the live JSXGraph board instance, or null if no board is rendered.
+   * Used by the verify_invariants tool to test geometric relationships.
+   */
+  getBoard: () => unknown | null;
   /**
    * Persist the current editor source as a new version snapshot for the open
    * document, tagged as saved by the agent. Resolves with the created version
@@ -31,9 +30,9 @@ export interface EditorMutationBridge {
    */
   saveVersion: (note?: string) => Promise<number>;
   /**
-   * Resolves once a compile triggered after this call reaches a terminal
-   * state ("done" | "timeout" | "loadError"), or on timeout — whichever
-   * comes first. Lets write tools report the real compile outcome.
+   * Resolves once a render triggered after this call reaches a terminal
+   * state ("done" | "error"), or on timeout — whichever comes first. Lets
+   * write tools report the real render outcome.
    */
   waitForRender: (timeoutMs?: number) => Promise<RenderStatusSnapshot>;
 }

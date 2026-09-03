@@ -12,10 +12,9 @@
  * on-demand through the host's load_skill tool.
  */
 import type { Skill } from "@earendil-works/pi-agent-core";
-import tikzCoreStyle from "./skills/tikz-core-style/SKILL.md";
-import tikzDomainPackages from "./skills/tikz-domain-packages/SKILL.md";
-import tikzFunctionPlots from "./skills/tikz-function-plots/SKILL.md";
-import tikzNodesDiagrams from "./skills/tikz-nodes-diagrams/SKILL.md";
+import jsxgraphConstraints from "./skills/jsxgraph-constraints/SKILL.md";
+import jsxgraphGeometry from "./skills/jsxgraph-geometry/SKILL.md";
+import jsxgraphPlots from "./skills/jsxgraph-plots/SKILL.md";
 
 const MAX_NAME_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 1024;
@@ -95,10 +94,9 @@ let cached: Skill[] | null = null;
 export function getBundledSkills(): Skill[] {
   if (cached === null) {
     cached = [
-      ["tikz-core-style", tikzCoreStyle],
-      ["tikz-domain-packages", tikzDomainPackages],
-      ["tikz-function-plots", tikzFunctionPlots],
-      ["tikz-nodes-diagrams", tikzNodesDiagrams],
+      ["jsxgraph-constraints", jsxgraphConstraints],
+      ["jsxgraph-plots", jsxgraphPlots],
+      ["jsxgraph-geometry", jsxgraphGeometry],
     ].flatMap(([sourceName, raw]) => {
       const skill = toSkill(raw, sourceName);
       return skill === null ? [] : [skill];

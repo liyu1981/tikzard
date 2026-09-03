@@ -1,14 +1,14 @@
 "use client";
 
 import hljs from "highlight.js/lib/core";
-import latex from "highlight.js/lib/languages/latex";
+import javascript from "highlight.js/lib/languages/javascript";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 let registered = false;
 
-function ensureLatex() {
+function ensureJavascript() {
   if (!registered) {
-    hljs.registerLanguage("latex", latex);
+    hljs.registerLanguage("javascript", javascript);
     registered = true;
   }
 }
@@ -16,14 +16,14 @@ function ensureLatex() {
 const LINE_HEIGHT = 20;
 const EDITOR_PADDING = 12;
 
-export function TikzEditor({
+export function CodeEditor({
   value,
   onChange,
 }: {
   value: string;
   onChange: (value: string) => void;
 }) {
-  ensureLatex();
+  ensureJavascript();
   const preRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -32,7 +32,7 @@ export function TikzEditor({
 
   // highlight.js escapes the raw source before wrapping matches in spans.
   const html = useMemo(
-    () => hljs.highlight(value, { language: "latex" }).value,
+    () => hljs.highlight(value, { language: "javascript" }).value,
     [value],
   );
 
@@ -102,7 +102,7 @@ export function TikzEditor({
         </pre>
         <textarea
           ref={textareaRef}
-          id="tikz-source"
+          id="code-source"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onSelect={syncOverlays}

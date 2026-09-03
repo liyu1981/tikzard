@@ -1,56 +1,11 @@
 "use client";
 
 /**
- * Rasterize the TikZJax-rendered preview <svg> into PNG bitmaps.
+ * Rasterize the JSXGraph-rendered preview <svg> into PNG bitmaps.
  *
- * The generated SVG typesets glyphs with <text font-family="cmr10"> nodes,
- * relying on @font-face rules served from /tikzjax/fonts.min.css. A
- * standalone SVG loaded through <img> cannot fetch external resources, so
- * every font family used by the drawing is inlined as a base64 data URI
- * before serialization — otherwise exported images lose all text.
+ * Unlike the old TikZ pipeline, JSXGraph renders standard SVG with web fonts
+ * — no special font inlining is needed for export.
  */
-
-const SVG_NS = "http://www.w3.org/2000/svg";
-const FONT_BASE_URL = "/tikzjax/fonts/";
-
-/** family -> @font-face CSS with embedded data, or null when unavailable. */
-const fontFaceCache = new Map<string, string | null>();
-
-async function loadFontFaceCss(family: string): Promise<string | null> {
-  if (fontFaceCache.has(family)) {
-    return fontFaceCache.get(family) ?? null;
-  }
-  try {
-    const res = await fetch(
-      `${FONT_BASE_URL}${encodeURIComponent(family)}.woff2`,
-    );
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    }
-    const css = `@font-face{font-family:"${family}";src:url(data:font/woff2;base64,${btoa(binary)}) format("woff2");}`;
-    fontFaceCache.set(family, css);
-    return css;
-  } catch {
-    fontFaceCache.set(family, null);
-    return null;
-  }
-}
-
-function collectFontFamilies(svg: SVGSVGElement): string[] {
-  const families = new Set<string>();
-  for (const el of svg.querySelectorAll("[font-family]")) {
-    const value = el.getAttribute("font-family");
-    if (value) {
-      families.add(value.trim());
-    }
-  }
-  return [...families];
-}
 
 function parseLengthPx(value: string | null): number | null {
   if (!value) {
@@ -69,8 +24,7 @@ function parseLengthPx(value: string | null): number | null {
 
 /**
  * Intrinsic CSS-pixel size of the drawing. Prefers the svg's own width and
- * height attributes (TikZJax writes them in pt); falls back to the visual
- * rect divided by the current zoom.
+ * height attributes; falls back to the visual rect divided by the current zoom.
  */
 export function measureSvgNaturalSize(
   svg: SVGSVGElement,
@@ -106,17 +60,6 @@ export async function renderSvgToCanvas(
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("width", String(width));
   clone.setAttribute("height", String(height));
-
-  const fontCss = (
-    await Promise.all(collectFontFamilies(clone).map(loadFontFaceCss))
-  )
-    .filter((css): css is string => css !== null)
-    .join("\n");
-  if (fontCss) {
-    const style = document.createElementNS(SVG_NS, "style");
-    style.textContent = fontCss;
-    clone.insertBefore(style, clone.firstChild);
-  }
 
   const xml = new XMLSerializer().serializeToString(clone);
   const blobUrl = URL.createObjectURL(
@@ -211,5 +154,5 @@ export function toFileSlug(title: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return slug || "tikz";
+  return slug || "jsxgraph";
 }

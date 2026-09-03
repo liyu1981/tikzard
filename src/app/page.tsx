@@ -27,8 +27,6 @@ import {
   currentDocIdAtom,
   docTitleAtom,
   entryGateAtom,
-  librariesAtom,
-  packagesAtom,
 } from "@/lib/workbench-state";
 
 export default function Home() {
@@ -38,8 +36,6 @@ export default function Home() {
   const setCode = useSetAtom(codeAtom);
   const setDocTitle = useSetAtom(docTitleAtom);
   const setCurrentDocId = useSetAtom(currentDocIdAtom);
-  const setPackages = useSetAtom(packagesAtom);
-  const setLibraries = useSetAtom(librariesAtom);
   const setSettingsRequest = useSetAtom(settingsRequestAtom);
 
   // Leaving an open document: its latest state is already autosaved to
@@ -72,14 +68,10 @@ export default function Home() {
         if (doc !== undefined) {
           setCode(doc.code);
           setDocTitle(doc.title);
-          setPackages(doc.packages ?? []);
-          setLibraries(doc.libraries ?? []);
           setCurrentDocId(doc.id);
           setEntryGate("workbench");
         } else {
           setLastOpenedDocId(null);
-          setPackages([]);
-          setLibraries([]);
           setEntryGate("welcome");
         }
       })
@@ -92,14 +84,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [
-    setCode,
-    setCurrentDocId,
-    setDocTitle,
-    setEntryGate,
-    setLibraries,
-    setPackages,
-  ]);
+  }, [setCode, setCurrentDocId, setDocTitle, setEntryGate]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[1920px] flex-col px-6 pt-16">

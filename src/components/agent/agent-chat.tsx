@@ -60,13 +60,6 @@ import {
   saveSession,
 } from "@/lib/agent/store";
 import { buildAgentTools } from "@/lib/agent/tools";
-import {
-  COMPILE_FAILURE_PATTERN,
-  type CompileLogEntry,
-  compileLogsAtom,
-  getLastCompileLogId,
-  pushCompileLog,
-} from "@/lib/compile-logs";
 import { leftTabAtom, pendingAnnotationAtom } from "@/lib/workbench-state";
 import { AgentSetupDialog } from "./agent-setup-dialog";
 import {
@@ -90,10 +83,6 @@ const LAST_MODEL_KEY = "agent.lastModel";
 const LAST_THINKING_KEY = "agent.lastThinkingLevel";
 const MAX_PROMPT_SOURCE_CHARS = 6000;
 const THINKING_LEVELS: ThinkingLevel[] = ["off", "low", "medium", "high"];
-/** Consecutive auto-fix retries before pausing and handing control back. */
-const AUTO_FIX_MAX_ATTEMPTS = 3;
-/** Failure log text is embedded in the auto message, truncated to this. */
-const AUTO_FIX_LOG_CHARS = 4000;
 
 interface ToolChip {
   id: string;
@@ -305,8 +294,7 @@ function ThinkingDisclosure({
 
 function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
   const { t, i18n } = useTranslation();
-  const leftTab = useAtomValue(leftTabAtom);
-  const compileLogs = useAtomValue(compileLogsAtom);
+  const _leftTab = useAtomValue(leftTabAtom);
   const [pendingAnnotation, setPendingAnnotation] = useAtom(
     pendingAnnotationAtom,
   );
@@ -334,9 +322,6 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docIdRef = useRef(docId);
-  const lastSeenLogIdRef = useRef(getLastCompileLogId());
-  const autoFixChainRef = useRef(0);
-  const pendingFailureRef = useRef<CompileLogEntry | null>(null);
   const streamingRef = useRef(false);
 
   useEffect(() => {
@@ -450,7 +435,7 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
   const promptGuarded = useCallback(
     async (instance: Agent, text: string, images?: ImageContent[]) => {
       await ensureContextCapacity(instance, (notice) =>
-        pushCompileLog("info", notice),
+        console.log("[context]", notice),
       );
       try {
         await instance.prompt(text, images);
@@ -468,9 +453,9 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
             overflow.limit,
           );
         }
-        pushCompileLog("error", t("agent.contextOverflowRetry"));
+        console.warn("[context]", t("agent.contextOverflowRetry"));
         await ensureContextCapacity(instance, (notice) =>
-          pushCompileLog("info", notice),
+          console.log("[context]", notice),
         );
         // Retry on the compacted transcript; instance.prompt() appends the
         // original user text and attachments itself.
@@ -478,44 +463,6 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
       }
     },
     [t],
-  );
-
-  const sendAutoFix = useCallback(
-    async (entry: CompileLogEntry) => {
-      if (streamingRef.current) {
-        pendingFailureRef.current = entry;
-        return;
-      }
-      const instance = agentRef.current;
-      const sessionNow = latestRef.current;
-      if (instance === null || sessionNow === null) {
-        return;
-      }
-      autoFixChainRef.current += 1;
-      if (autoFixChainRef.current > AUTO_FIX_MAX_ATTEMPTS) {
-        setRunError(
-          t("agent.autoFixLimitReached", { count: AUTO_FIX_MAX_ATTEMPTS }),
-        );
-        autoFixChainRef.current = 0;
-        return;
-      }
-      const message = t("agent.autoFixMessage", {
-        logs: entry.text.slice(0, AUTO_FIX_LOG_CHARS),
-      });
-      latestRef.current = sessionNow;
-      instance.state.systemPrompt = buildSystemPrompt(sessionNow.systemPrompt);
-      setStreaming(true);
-      setRunError(null);
-      try {
-        await promptGuarded(instance, message);
-        await persistSession(sessionNow, instance.state.messages);
-      } catch (err) {
-        setRunError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setStreaming(false);
-      }
-    },
-    [buildSystemPrompt, persistSession, promptGuarded, t],
   );
 
   const subscribeAgent = useCallback(
@@ -602,18 +549,13 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
             );
             setToolChips([]);
             setExpandedToolCalls(new Set());
-            if (pendingFailureRef.current !== null) {
-              const pending = pendingFailureRef.current;
-              pendingFailureRef.current = null;
-              window.setTimeout(() => void sendAutoFix(pending), 300);
-            }
             break;
           default:
             break;
         }
       });
     },
-    [persistSession, sendAutoFix, syncTranscript, toolLabels],
+    [persistSession, syncTranscript, toolLabels],
   );
 
   const buildForSession = useCallback(
@@ -705,8 +647,6 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
     agentRef.current?.abort();
     agentRef.current = null;
     latestRef.current = null;
-    pendingFailureRef.current = null;
-    autoFixChainRef.current = 0;
     setStreaming(false);
     setStreamingText("");
     setStreamingThinking("");
@@ -760,32 +700,6 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
     }
   }, [sessions, streamingText, streamingThinking, toolChips]);
 
-  // React to compile failures arriving in the shared log stream: only while
-  // the assistant tab is open, and each failure entry is handled once.
-  useEffect(() => {
-    const fresh = compileLogs.filter(
-      (entry) => entry.id > lastSeenLogIdRef.current,
-    );
-    const newest = compileLogs[compileLogs.length - 1];
-    lastSeenLogIdRef.current = newest ? newest.id : lastSeenLogIdRef.current;
-    if (fresh.length === 0) {
-      return;
-    }
-    if (fresh.some((entry) => /Compiled in /.test(entry.text))) {
-      autoFixChainRef.current = 0;
-    }
-    if (leftTab !== "assistant") {
-      return;
-    }
-    const failure = fresh.find((entry) =>
-      COMPILE_FAILURE_PATTERN.test(entry.text),
-    );
-    if (failure === undefined) {
-      return;
-    }
-    void sendAutoFix(failure);
-  }, [compileLogs, leftTab, sendAutoFix]);
-
   /**
    * Run one user turn end-to-end: lazily create the session, refresh the
    * effective system prompt, stream the reply, and persist. `titleOverride`
@@ -808,7 +722,6 @@ function AgentChatBase({ bridge, docId, className }: AgentChatProps) {
       }
       latestRef.current = sessionNow;
       instance.state.systemPrompt = buildSystemPrompt(sessionNow.systemPrompt);
-      autoFixChainRef.current = 0;
       setStreaming(true);
       setRunError(null);
       try {

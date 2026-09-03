@@ -1,39 +1,25 @@
 "use client";
 
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { TagSuggestion } from "@/components/tex-tag-input";
 import { WorkbenchLeftPanel } from "@/components/workbench-left-panel";
 import { WorkbenchPreviewPanel } from "@/components/workbench-preview-panel";
-import type { RightTab } from "@/components/workbench-types";
 import { useAgentWorkbenchBridge } from "@/hooks/use-agent-workbench-bridge";
 import { useDocumentPersistence } from "@/hooks/use-document-persistence";
-import { useTikzRenderer } from "@/hooks/use-tikz-renderer";
+import { useJsxGraphRenderer } from "@/hooks/use-jsxgraph-renderer";
 import { useWorkbenchPreview } from "@/hooks/use-workbench-preview";
 import { useWorkbenchVersions } from "@/hooks/use-workbench-versions";
-import {
-  LIBRARY_HINTS,
-  SUPPORTED_LIBRARIES,
-  SUPPORTED_PACKAGES,
-} from "@/lib/tikz-packages";
 import {
   codeAtom,
   currentDocIdAtom,
   docTitleAtom,
   leftTabAtom,
-  librariesAtom,
-  packagesAtom,
   pendingAnnotationAtom,
 } from "@/lib/workbench-state";
 
 /** How long the "Saved" confirmation stays on the save-version button. */
 const VERSION_SAVED_FEEDBACK_MS = 1600;
-
-const PACKAGE_SUGGESTIONS: TagSuggestion[] = SUPPORTED_PACKAGES.map((pkg) => ({
-  id: pkg.id,
-  description: pkg.description,
-}));
 
 export function TikzWorkbench() {
   const { t } = useTranslation();
@@ -44,9 +30,6 @@ export function TikzWorkbench() {
   const leftTab = useAtomValue(leftTabAtom);
   const setLeftTab = useSetAtom(leftTabAtom);
   const setPendingAnnotation = useSetAtom(pendingAnnotationAtom);
-  const [packages, setPackages] = useAtom(packagesAtom);
-  const [libraries, setLibraries] = useAtom(librariesAtom);
-  const [rightTab, setRightTab] = useState<RightTab>("preview");
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [saveVersionState, setSaveVersionState] = useState<
     "idle" | "saving" | "saved"
@@ -60,8 +43,6 @@ export function TikzWorkbench() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const codeRef = useRef(code);
-  const packagesRef = useRef(packages);
-  const librariesRef = useRef(libraries);
   const saveVersionTimerRef = useRef<number | null>(null);
 
   const {
@@ -72,7 +53,8 @@ export function TikzWorkbench() {
     renderSeqRef,
     statusRef,
     doneInfoMsRef,
-  } = useTikzRenderer({ code, stageRef, t, packages, libraries });
+    boardRef,
+  } = useJsxGraphRenderer({ code, stageRef });
   const {
     zoom,
     setZoom,
@@ -98,8 +80,6 @@ export function TikzWorkbench() {
     docTitle,
     currentDocId,
     status,
-    packages,
-    libraries,
     canvasRef,
     zoomRef,
     setCurrentDocId,
@@ -115,7 +95,6 @@ export function TikzWorkbench() {
     codeRef,
     setCode,
     setCurrentDocId,
-    t,
   });
 
   // Clear the pending "saved" feedback revert on unmount.
@@ -132,35 +111,18 @@ export function TikzWorkbench() {
     codeRef.current = code;
   }, [code]);
 
-  useEffect(() => {
-    packagesRef.current = packages;
-  }, [packages]);
-
-  useEffect(() => {
-    librariesRef.current = libraries;
-  }, [libraries]);
-
   const agentBridge = useAgentWorkbenchBridge({
     codeRef,
     statusRef,
     doneInfoMsRef,
     renderSeqRef,
+    boardRef,
     ensureDocId,
     setCode,
-    getPackages: () => packagesRef.current,
-    setPackages,
-    getLibraries: () => librariesRef.current,
-    setLibraries,
     setNextVersionNo,
-    t,
   });
 
-  const busy = status === "booting" || status === "loadError";
-  const librarySuggestions = useMemo<TagSuggestion[]>(
-    () =>
-      SUPPORTED_LIBRARIES.map((id) => ({ id, description: LIBRARY_HINTS[id] })),
-    [],
-  );
+  const busy = status === "rendering";
   const handleSaveButton = useCallback(() => {
     if (saveVersionState !== "idle") {
       return;
@@ -198,21 +160,14 @@ export function TikzWorkbench() {
         nextVersionNo={nextVersionNo}
         saveVersionState={saveVersionState}
         versionsOpen={versionsOpen}
-        packages={packages}
-        libraries={libraries}
-        packageSuggestions={PACKAGE_SUGGESTIONS}
-        librarySuggestions={librarySuggestions}
         onCodeChange={setCode}
         onLeftTabChange={setLeftTab}
         onRender={() => renderNow(code)}
         onSaveVersion={handleSaveButton}
         onVersionsOpenChange={setVersionsOpen}
-        onPackagesChange={setPackages}
-        onLibrariesChange={setLibraries}
         onRestoreVersion={handleRestoreVersion}
       />
       <WorkbenchPreviewPanel
-        rightTab={rightTab}
         status={status}
         doneInfo={doneInfo}
         nowTick={nowTick}
@@ -222,7 +177,6 @@ export function TikzWorkbench() {
         previewHostEl={previewHostEl}
         stageRef={stageRef}
         canvasRef={canvasRef}
-        onRightTabChange={setRightTab}
         onAnnotateToggle={handleAnnotateToggle}
         onFit={fitView}
         onZoomChange={setZoom}

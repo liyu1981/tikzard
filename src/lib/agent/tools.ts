@@ -10,12 +10,6 @@
  */
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type TSchema, Type } from "@earendil-works/pi-ai";
-import {
-  SUPPORTED_LIBRARY_IDS,
-  SUPPORTED_PACKAGE_IDS,
-  validateLibraryIds,
-  validatePackageIds,
-} from "@/lib/tikz-packages";
 import type { EditorMutationBridge } from "./editor-mutations";
 import { formatSkillPayload, getSkillByName } from "./skills";
 
@@ -42,17 +36,19 @@ function requireBridge(
   bridge: EditorMutationBridge | undefined,
 ): EditorMutationBridge {
   if (bridge === undefined) {
-    throw new Error("The TikZ workbench is not open — this tool requires it.");
+    throw new Error(
+      "The JSXGraph workbench is not open — this tool requires it.",
+    );
   }
   return bridge;
 }
 
 export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
   const getSource = tool({
-    name: "get_tikz_source",
-    label: "Read TikZ source",
+    name: "get_source",
+    label: "Read source",
     description:
-      "Read the TikZ/LaTeX source currently open in the workbench editor. Use before editing to see what the user is working on.",
+      "Read the JSXGraph JavaScript source currently open in the workbench editor. Use before editing to see what the user is working on.",
     parameters: Type.Object({}),
     execute: async () => {
       const ed = requireBridge(bridge);
@@ -64,26 +60,26 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
     name: "get_render_status",
     label: "Get render status",
     description:
-      "Report the current compile status of the TikZ preview (booting/ready/rendering/done/timeout/loadError) and the last compile duration in milliseconds. Use to check whether a drawing compiled successfully.",
+      "Report the current render status of the JSXGraph preview (ready/rendering/done/error) and the last render duration in milliseconds. Use to check whether a drawing rendered successfully.",
     parameters: Type.Object({}),
     execute: async () => {
       const ed = requireBridge(bridge);
       const snapshot = ed.getRenderStatus();
       return textBlocks(
-        `status: ${snapshot.status}\nlastCompileMs: ${snapshot.durationMs ?? "unknown"}`,
+        `status: ${snapshot.status}\nlastRenderMs: ${snapshot.durationMs ?? "unknown"}`,
       );
     },
   });
 
   const setSource = tool({
-    name: "set_tikz_source",
-    label: "Write TikZ source",
+    name: "set_source",
+    label: "Write source",
     description:
-      "Replace the entire TikZ source in the workbench editor; the preview recompiles automatically. If the compile fails, the host forwards the compiler output as a follow-up message so you can fix the source. Always send the complete updated tikzpicture, never a fragment.",
+      "Replace the entire JSXGraph source in the workbench editor; the preview re-renders automatically. If the render fails, the host forwards the error as a follow-up message so you can fix the source. Always send the complete updated source, never a fragment.",
     parameters: Type.Object({
       source: Type.String({
         description:
-          "Complete tikzpicture LaTeX source to place in the editor, e.g.\n\\begin{tikzpicture}\n  \\draw[->] (0,0) -- (1,1);\n\\end{tikzpicture}",
+          "Complete JSXGraph JavaScript source to place in the editor. The source is executed as `new Function('board', 'JXG', source)(board, JXG)` where board is a live JSXGraph board.\n\nExample:\nboard.create('axis', [[0, 0], [1, 0]], { name: 'x', withLabel: true });\nboard.create('point', [1, 1], { name: 'A' });",
       }),
     }),
     execute: async (_id, args) => {
@@ -94,16 +90,43 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
       }
       ed.setCode(source);
       return textBlocks(
-        "Source replaced in the editor; the preview is recompiling. You will be notified if compilation fails.",
+        "Source replaced in the editor; the preview is re-rendering. You will be notified if rendering fails.",
       );
     },
   });
 
+  const verifyInvariants = tool({
+    name: "verify_invariants",
+    label: "Verify invariants",
+    description:
+      "Execute JavaScript on the live JSXGraph board to check geometric relationships. The code expression must evaluate to a boolean. Returns the result. Use this to verify that your construction maintains its properties (e.g. angles, distances, collinearity) after creating it.",
+    parameters: Type.Object({
+      code: Type.String({
+        description:
+          "JavaScript expression that evaluates to a boolean, executed with `board` and `JXG` in scope. Examples:\n- `Math.abs(JXG.Math.rad(A, B, C) * 180 / Math.PI - 90) < 0.001` (angle ABC is 90°)\n- `Math.abs(A.X() - B.X()) < 0.001 && Math.abs(A.Y() - B.Y()) < 0.001` (A equals B)\n- `board.objects.A.visProp.visible === true` (point A is visible)",
+      }),
+    }),
+    execute: async (_id, args) => {
+      const ed = requireBridge(bridge);
+      const board = ed.getBoard();
+      if (board === null) {
+        throw new Error("No board is currently rendered.");
+      }
+      // Dynamically import JXG to access the full namespace
+      const { JXG } = await import("@/lib/jsxgraph");
+      const result = new Function("board", "JXG", `return (${args.code})`)(
+        board,
+        JXG,
+      );
+      return textBlocks(`result: ${String(result)}`);
+    },
+  });
+
   const saveVersion = tool({
-    name: "save_tikz_version",
+    name: "save_version",
     label: "Save a version snapshot",
     description:
-      "Persist the current TikZ source as a new version snapshot of the open document (its version number increments). Call this BEFORE set_tikz_source to checkpoint the user's current drawing before you change it — unless you are fixing a compilation bug, in which case do NOT create a snapshot of a broken state. Optionally pass a short note describing the snapshot (e.g. the change you are about to make).",
+      "Persist the current source as a new version snapshot of the open document (its version number increments). Call this BEFORE set_source to checkpoint the user's current drawing before you change it — unless you are fixing a rendering bug, in which case do NOT create a snapshot of a broken state. Optionally pass a short note describing the snapshot (e.g. the change you are about to make).",
     parameters: Type.Object({
       note: Type.Optional(
         Type.String({
@@ -140,103 +163,12 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
     },
   });
 
-  const getPackages = tool({
-    name: "get_tikz_packages",
-    label: "Read TikZ packages",
-    description:
-      "Report the optional LaTeX packages currently selected for the open diagram. Use to check which packages are enabled before drawing.",
-    parameters: Type.Object({}),
-    execute: async () => {
-      const ed = requireBridge(bridge);
-      const ids = ed.getPackages();
-      return textBlocks(
-        ids.length > 0
-          ? `enabledPackages: ${ids.join(", ")}`
-          : "enabledPackages: (none — core TikZ/PGF only)",
-      );
-    },
-  });
-
-  const setPackages = tool({
-    name: "set_tikz_packages",
-    label: "Set TikZ packages",
-    description: `Select which optional LaTeX packages the current diagram needs. Pass the exact package ids; the preview recompiles automatically. Use this instead of writing \\usepackage in the source. Supported ids: ${[...SUPPORTED_PACKAGE_IDS].join(", ")}.`,
-    parameters: Type.Object({
-      packages: Type.Array(
-        Type.String({
-          description:
-            'Package ids to enable, e.g. ["circuitikz"] or ["chemfig","tkz-tab"]. Pass an empty array to use core TikZ/PGF only.',
-        }),
-      ),
-    }),
-    execute: async (_id, args) => {
-      const ed = requireBridge(bridge);
-      const { valid, invalid } = validatePackageIds(args.packages);
-      if (invalid.length > 0) {
-        throw new Error(
-          `Unsupported package ids: ${invalid.join(", ")}. Supported: ${[...SUPPORTED_PACKAGE_IDS].join(", ")}.`,
-        );
-      }
-      ed.setPackages(valid);
-      return textBlocks(
-        `Enabled packages: ${valid.length > 0 ? valid.join(", ") : "(none — core TikZ/PGF only)"}. The preview is recompiling.`,
-      );
-    },
-  });
-
-  const getLibraries = tool({
-    name: "get_tikz_libraries",
-    label: "Read TikZ libraries",
-    description:
-      "Report the TikZ/PGF libraries currently selected for the open diagram. Use to check which libraries are enabled before drawing.",
-    parameters: Type.Object({}),
-    execute: async () => {
-      const ed = requireBridge(bridge);
-      const ids = ed.getLibraries();
-      return textBlocks(
-        ids.length > 0
-          ? `enabledLibraries: ${ids.join(", ")}`
-          : "enabledLibraries: (none)",
-      );
-    },
-  });
-
-  const setLibraries = tool({
-    name: "set_tikz_libraries",
-    label: "Set TikZ libraries",
-    description: `Select which TikZ/PGF libraries the current diagram needs (replaces \\usetikzlibrary in the source). Pass exact library ids; the preview recompiles automatically. Supported ids include: arrows.meta, positioning, calc, fit, automata, quotes, decorations.pathmorphing, decorations.markings, shapes.geometric, matrix, patterns, shadows. Call get_tikz_libraries or ask the user for the full bundled list.`,
-    parameters: Type.Object({
-      libraries: Type.Array(
-        Type.String({
-          description:
-            'Library ids to enable, e.g. ["arrows.meta","positioning"]. Pass an empty array to disable all.',
-        }),
-      ),
-    }),
-    execute: async (_id, args) => {
-      const ed = requireBridge(bridge);
-      const { valid, invalid } = validateLibraryIds(args.libraries);
-      if (invalid.length > 0) {
-        throw new Error(
-          `Unsupported library ids: ${invalid.join(", ")}. Use ids exactly as TikZ names them, e.g. "${[...SUPPORTED_LIBRARY_IDS].slice(0, 12).join('", "')}".`,
-        );
-      }
-      ed.setLibraries(valid);
-      return textBlocks(
-        `Enabled libraries: ${valid.length > 0 ? valid.join(", ") : "(none)"}. The preview is recompiling.`,
-      );
-    },
-  });
-
   return [
     getSource,
     getRenderStatus,
     setSource,
+    verifyInvariants,
     saveVersion,
     loadSkill,
-    getPackages,
-    setPackages,
-    getLibraries,
-    setLibraries,
   ] as unknown as AgentTool[];
 }
