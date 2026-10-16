@@ -68,6 +68,10 @@
     "saved": "已保存",
     "versionSaved": "已保存版本 {{number}}",
     "history": "版本历史",
+    "compileLogs": "日志",
+    "compileLogsEmpty": "暂无日志输出。",
+    "clearBoard": "清空画布",
+    "toggleAxes": "切换坐标轴与网格",
     "versionRestored": "已恢复版本 {{number}}",
     "annotate": "标注",
     "annotatePen": "画笔",
@@ -167,7 +171,9 @@
     "refresh": "刷新",
     "modelsRefreshed": "模型列表已刷新。",
     "contextField": "上下文",
-    "contextUsageHint": "已用模型上下文窗口的 {{percent}}%（约 {{tokens}} / {{limit}} tokens）。超过 {{threshold}}% 后，最早的对话会自动折叠为摘要。"
+    "contextUsageHint": "已用模型上下文窗口的 {{percent}}%（约 {{tokens}} / {{limit}} tokens）。超过 {{threshold}}% 后，最早的对话会自动折叠为摘要。",
+    "autoFixMessage": "JSXGraph 预览渲染失败。错误输出：\n{{logs}}\n\n请修复源码，并调用 set_source 提交完整修正后的代码。",
+    "autoFixLimitReached": "连续 {{count}} 次渲染失败后已暂停自动修复——请自行检查源码，或发送消息继续。"
   },
   "welcome": {
     "tagline": "本地优先的 JSXGraph 工作台——左侧编写 JavaScript，右侧即时看到交互式图形。",

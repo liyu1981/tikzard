@@ -68,6 +68,10 @@
     "saved": "Saved",
     "versionSaved": "Saved version {{number}}",
     "history": "Version history",
+    "compileLogs": "Logs",
+    "compileLogsEmpty": "No log output yet.",
+    "clearBoard": "Clear board",
+    "toggleAxes": "Toggle axes and grid",
     "versionRestored": "Restored version {{number}}",
     "annotate": "Annotate",
     "annotatePen": "Pen",
@@ -167,7 +171,9 @@
     "refresh": "Refresh",
     "modelsRefreshed": "Model catalog refreshed.",
     "contextField": "Context",
-    "contextUsageHint": "{{percent}}% of the model's context window (≈{{tokens}} / {{limit}} tokens). Oldest turns are folded into a summary past {{threshold}}%."
+    "contextUsageHint": "{{percent}}% of the model's context window (≈{{tokens}} / {{limit}} tokens). Oldest turns are folded into a summary past {{threshold}}%.",
+    "autoFixMessage": "The JSXGraph preview failed to render. Error output:\n{{logs}}\n\nPlease fix the source and call set_source with the complete corrected code.",
+    "autoFixLimitReached": "Auto-fix paused after {{count}} consecutive failed renders — review the source yourself, or send a message to continue."
   },
   "welcome": {
     "tagline": "A local-first JSXGraph workbench — write JavaScript on the left, see the interactive drawing on the right.",

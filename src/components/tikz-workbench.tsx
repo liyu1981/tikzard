@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { WorkbenchLeftPanel } from "@/components/workbench-left-panel";
 import { WorkbenchPreviewPanel } from "@/components/workbench-preview-panel";
+import type { RightTab } from "@/components/workbench-types";
 import { useAgentWorkbenchBridge } from "@/hooks/use-agent-workbench-bridge";
 import { useDocumentPersistence } from "@/hooks/use-document-persistence";
 import { useJsxGraphRenderer } from "@/hooks/use-jsxgraph-renderer";
@@ -30,6 +31,7 @@ export function TikzWorkbench() {
   const leftTab = useAtomValue(leftTabAtom);
   const setLeftTab = useSetAtom(leftTabAtom);
   const setPendingAnnotation = useSetAtom(pendingAnnotationAtom);
+  const [rightTab, setRightTab] = useState<RightTab>("preview");
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [saveVersionState, setSaveVersionState] = useState<
     "idle" | "saving" | "saved"
@@ -49,7 +51,9 @@ export function TikzWorkbench() {
     status,
     doneInfo,
     nowTick,
+    showAxes,
     renderNow,
+    toggleAxes,
     renderSeqRef,
     statusRef,
     doneInfoMsRef,
@@ -149,6 +153,11 @@ export function TikzWorkbench() {
     setAnnotating((prev) => !prev);
   }, [annotating, ensurePlaceholderSvg]);
 
+  /** Clear the board by setting code to an empty snippet. */
+  const handleClearBoard = useCallback(() => {
+    setCode("// Start drawing here\n");
+  }, [setCode]);
+
   return (
     <div className="materialize grid h-full min-h-0 w-full grid-cols-1 grid-rows-[repeat(2,minmax(0,1fr))] gap-4 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)]">
       <WorkbenchLeftPanel
@@ -166,17 +175,22 @@ export function TikzWorkbench() {
         onSaveVersion={handleSaveButton}
         onVersionsOpenChange={setVersionsOpen}
         onRestoreVersion={handleRestoreVersion}
+        onClearBoard={handleClearBoard}
       />
       <WorkbenchPreviewPanel
+        rightTab={rightTab}
         status={status}
         doneInfo={doneInfo}
         nowTick={nowTick}
         zoom={zoom}
+        showAxes={showAxes}
         exporting={exporting}
         annotating={annotating}
         previewHostEl={previewHostEl}
         stageRef={stageRef}
         canvasRef={canvasRef}
+        onRightTabChange={setRightTab}
+        onToggleAxes={toggleAxes}
         onAnnotateToggle={handleAnnotateToggle}
         onFit={fitView}
         onZoomChange={setZoom}
