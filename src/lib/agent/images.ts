@@ -54,6 +54,17 @@ export function imageContentToDataUrl(content: ImageContent): string {
   return `data:${content.mimeType};base64,${content.data}`;
 }
 
+/** Rebuild a `File` from an `ImageContent` block (e.g. a staged annotation)
+    so it can be handed to a file-input based composer. */
+export function imageContentToFile(content: ImageContent, name: string): File {
+  const binary = atob(content.data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new File([bytes], name, { type: content.mimeType });
+}
+
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

@@ -192,7 +192,6 @@ export function TikzWorkbench() {
       <WorkbenchLeftPanel
         code={code}
         leftTab={leftTab}
-        currentDocId={currentDocId}
         busy={busy}
         agentBridge={agentBridge}
         nextVersionNo={nextVersionNo}

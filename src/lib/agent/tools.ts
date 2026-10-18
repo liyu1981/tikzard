@@ -1,15 +1,20 @@
 /**
- * Host-app agent tools for tikzard. Each tool is a plain object with a
- * TypeBox parameter schema; execute() returns text blocks or throws.
+ * Host-app agent tools for tikzard, packaged as ReAgent tool descriptors.
+ * Each descriptor appears in ReAgent's Tools settings panel (so users can
+ * switch it off) and is built lazily through the mutation bridge.
  *
- * Two tool classes:
- * - Read-only: backed by the host workbench state. No side effects.
- * - Bridge writes: mutate live workbench UI state through the mutation bridge
- *   (see editor-mutations.ts). NEVER call backend APIs — changes land in the
- *   UI immediately but persist only within the open page.
+ * All tools are backed by the host workbench state through the mutation
+ * bridge (see editor-mutations.ts). They NEVER call backend APIs — changes
+ * land in the live editor/preview immediately.
  */
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type TSchema, Type } from "@earendil-works/pi-ai";
+import type { AgentToolDescriptor } from "@liyu1981/reagent";
+import {
+  COMPILE_FAILURE_PATTERN,
+  getCompileLogsSince,
+  getLastCompileLogId,
+} from "@/lib/compile-logs";
 import {
   SUPPORTED_LIBRARY_IDS,
   SUPPORTED_PACKAGE_IDS,
@@ -17,9 +22,10 @@ import {
   validatePackageIds,
 } from "@/lib/tikz-packages";
 import type { EditorMutationBridge } from "./editor-mutations";
-import { formatSkillPayload, getSkillByName } from "./skills";
 
 const MAX_SOURCE_CHARS = 20000;
+/** Compiler output embedded in a tool result is truncated to this. */
+const MAX_COMPILE_OUTPUT_CHARS = 4000;
 
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n…[truncated]`;
@@ -47,7 +53,7 @@ function requireBridge(
   return bridge;
 }
 
-export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
+function buildTikzTools(bridge?: EditorMutationBridge): AgentTool[] {
   const getSource = tool({
     name: "get_tikz_source",
     label: "Read TikZ source",
@@ -79,7 +85,7 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
     name: "set_tikz_source",
     label: "Write TikZ source",
     description:
-      "Replace the entire TikZ source in the workbench editor; the preview recompiles automatically. If the compile fails, the host forwards the compiler output as a follow-up message so you can fix the source. Always send the complete updated tikzpicture, never a fragment.",
+      "Replace the entire TikZ source in the workbench editor and wait for the preview to recompile. Returns the compile result. If compilation fails, the result contains the compiler output — fix the source and call set_tikz_source again with the complete corrected tikzpicture. Always send the complete updated tikzpicture, never a fragment.",
     parameters: Type.Object({
       source: Type.String({
         description:
@@ -92,9 +98,28 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
       if (source === "") {
         throw new Error("Refusing to set an empty source.");
       }
+      if (source === ed.getCode().trim()) {
+        return textBlocks(
+          "The editor already contains exactly this source; nothing changed.",
+        );
+      }
+      const marker = getLastCompileLogId();
       ed.setCode(source);
+      const result = await ed.waitForRender();
+      if (result.status === "done") {
+        return textBlocks(
+          "Source replaced in the editor and the preview compiled successfully.",
+        );
+      }
+      const output = getCompileLogsSince(marker)
+        .filter(
+          (entry) =>
+            entry.level === "error" || COMPILE_FAILURE_PATTERN.test(entry.text),
+        )
+        .map((entry) => entry.text)
+        .join("\n");
       return textBlocks(
-        "Source replaced in the editor; the preview is recompiling. You will be notified if compilation fails.",
+        `Compilation FAILED. Fix the source and call set_tikz_source again with the complete corrected tikzpicture.\n\nCompiler output:\n${truncate(output || "(no compiler output captured)", MAX_COMPILE_OUTPUT_CHARS)}`,
       );
     },
   });
@@ -116,27 +141,6 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
       const ed = requireBridge(bridge);
       const number = await ed.saveVersion(args.note);
       return textBlocks(`Saved version v${number} of the current source.`);
-    },
-  });
-
-  const loadSkill = tool({
-    name: "load_skill",
-    label: "Load skill",
-    description:
-      "Load the full instructions of a named skill (specialized drawing guides listed in the system prompt under <available_skills>). Call this BEFORE attempting a task that matches one of the skill descriptions, and follow the returned instructions.",
-    parameters: Type.Object({
-      name: Type.String({
-        description: "Skill name exactly as listed in <available_skills>.",
-      }),
-    }),
-    execute: async (_id, args) => {
-      const skill = getSkillByName(args.name.trim());
-      if (skill === undefined) {
-        throw new Error(
-          `Unknown skill "${args.name}". Call load_skill with one of the exact names listed in <available_skills>.`,
-        );
-      }
-      return textBlocks(formatSkillPayload(skill));
     },
   });
 
@@ -233,10 +237,28 @@ export function buildAgentTools(bridge?: EditorMutationBridge): AgentTool[] {
     getRenderStatus,
     setSource,
     saveVersion,
-    loadSkill,
     getPackages,
     setPackages,
     getLibraries,
     setLibraries,
   ] as unknown as AgentTool[];
+}
+
+/**
+ * The tikzard tool descriptors handed to ReAgent's `extraDescriptors` prop.
+ * ReAgent builds their instances (via `build`) when a session starts and lists
+ * them in Settings → Tools, where each can be switched off.
+ */
+export function buildTikzToolDescriptors(
+  bridge?: EditorMutationBridge,
+): AgentToolDescriptor[] {
+  return buildTikzTools(bridge).map((instance) => ({
+    id: instance.name,
+    name: instance.name,
+    label: instance.label,
+    description: instance.description,
+    group: "editor",
+    defaultEnabled: true,
+    build: () => instance,
+  }));
 }

@@ -6,9 +6,7 @@ import { type ComponentType, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import tikzardLogo from "@/app/icon.svg";
-import { AgentSettings } from "@/components/agent/agent-settings";
 import {
-  BotIcon,
   CheckIcon,
   GithubIcon,
   GlobeIcon,
@@ -27,7 +25,7 @@ import type { Theme } from "@/lib/theme";
 import { getMaxVersions, setMaxVersions } from "@/lib/versions";
 import pkg from "../../package.json";
 
-type SettingsTab = "ai" | "system" | "storage" | "about";
+type SettingsTab = "system" | "storage" | "about";
 
 /**
  * Shared request channel so controls outside this component (e.g. the page
@@ -214,7 +212,7 @@ export function SettingsDialog() {
   const { t } = useTranslation();
   const request = useAtomValue(settingsRequestAtom);
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<SettingsTab>("ai");
+  const [tab, setTab] = useState<SettingsTab>("system");
 
   // Apply open requests coming through the shared atom (footer link etc.).
   // A fresh object reference each set re-fires this even for the same tab.
@@ -246,7 +244,6 @@ export function SettingsDialog() {
     labelKey: string;
     Icon: ComponentType<{ className?: string }>;
   }[] = [
-    { id: "ai", labelKey: "settings.tabAI", Icon: BotIcon },
     { id: "system", labelKey: "settings.tabSystem", Icon: GlobeIcon },
     { id: "storage", labelKey: "settings.tabStorage", Icon: PackageIcon },
     { id: "about", labelKey: "settings.tabAbout", Icon: InfoIcon },
@@ -318,13 +315,6 @@ export function SettingsDialog() {
                 </header>
 
                 <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                  <div
-                    hidden={tab !== "ai"}
-                    role="tabpanel"
-                    aria-label={t("settings.tabAI")}
-                  >
-                    <AgentSettings />
-                  </div>
                   {tab === "system" && (
                     <div role="tabpanel" aria-label={t("settings.tabSystem")}>
                       <SystemSettings />

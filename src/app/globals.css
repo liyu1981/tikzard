@@ -1,4 +1,10 @@
 @import "tailwindcss";
+@import "@liyu1981/reagent/styles.css";
+@source "../../node_modules/@liyu1981/reagent/dist";
+
+/* ReAgent (and the app's own `dark:` utilities) key off a `.dark` class on
+   an ancestor rather than the OS media query, matching the theme switcher. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: oklch(0.98 0.003 270);
@@ -82,6 +88,14 @@ body {
 :focus-visible {
   outline: 2px solid color-mix(in oklch, var(--ring) 80%, transparent);
   outline-offset: 2px;
+}
+
+/* ReAgent controls draw their own focus rings (the composer's `focus-within`
+   ring, buttons' `focus-visible` rings). Our unlayered outline above wins over
+   their layered `outline-none`, double-drawing around the inner textarea — so
+   keep it out of the embedded ReAgent subtree. */
+[data-slot="reagent-root"] :focus-visible {
+  outline: none;
 }
 
 /* highlight.js — TikZ/LaTeX theme built from app tokens so it follows

@@ -5,13 +5,11 @@
  * src/lib/agent/skills/<name>/SKILL.md and imported as raw text at build
  * time (offline-first - no runtime fetch, no filesystem).
  *
- * Mirrors what pi-coding-agent does with @earendil-works/pi-agent-core's
- * loadSkills/formatSkillsForSystemPrompt/formatSkillInvocation trio, adapted
- * to this app's browser runtime: progressive disclosure - only names and
- * descriptions go into the system prompt; full instructions are loaded
- * on-demand through the host's load_skill tool.
+ * The parsed guides are seeded into ReAgent's skill registry (see
+ * bootstrap.ts): only names and descriptions go into the system prompt, and
+ * the full instructions are loaded on demand through ReAgent's built-in
+ * `use_skill` tool.
  */
-import type { Skill } from "@earendil-works/pi-agent-core";
 import tikzCoreStyle from "./skills/tikz-core-style/SKILL.md";
 import tikzDomainPackages from "./skills/tikz-domain-packages/SKILL.md";
 import tikzFunctionPlots from "./skills/tikz-function-plots/SKILL.md";
@@ -19,6 +17,15 @@ import tikzNodesDiagrams from "./skills/tikz-nodes-diagrams/SKILL.md";
 
 const MAX_NAME_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 1024;
+
+/** Shape ReAgent stores skills in (see its `AgentSkillConfig`). */
+export interface BundledSkillConfig {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  enabled: boolean;
+}
 
 /** Parse a leading `---` frontmatter block into scalar key/value pairs. */
 function parseFrontmatter(raw: string): {
@@ -51,8 +58,11 @@ function parseFrontmatter(raw: string): {
   return { frontmatter, body: normalized.slice(end + 4).trim() };
 }
 
-/** Turn a raw SKILL.md string into a Skill, or null when it is invalid. */
-function toSkill(raw: string, sourceName: string): Skill | null {
+/** Turn a raw SKILL.md string into a skill config, or null when invalid. */
+function toSkillConfig(
+  raw: string,
+  sourceName: string,
+): BundledSkillConfig | null {
   const { frontmatter, body } = parseFrontmatter(raw);
   const name = frontmatter.name ?? sourceName;
   const description = frontmatter.description ?? "";
@@ -80,19 +90,13 @@ function toSkill(raw: string, sourceName: string): Skill | null {
     );
     return null;
   }
-  return {
-    name,
-    description,
-    content: body,
-    filePath: `bundled://${name}/SKILL.md`,
-    disableModelInvocation: false,
-  };
+  return { id: name, name, description, content: body, enabled: true };
 }
 
-let cached: Skill[] | null = null;
+let cached: BundledSkillConfig[] | null = null;
 
 /** All valid bundled skills, parsed once per page load. */
-export function getBundledSkills(): Skill[] {
+export function getBundledSkillConfigs(): BundledSkillConfig[] {
   if (cached === null) {
     cached = [
       ["tikz-core-style", tikzCoreStyle],
@@ -100,58 +104,9 @@ export function getBundledSkills(): Skill[] {
       ["tikz-function-plots", tikzFunctionPlots],
       ["tikz-nodes-diagrams", tikzNodesDiagrams],
     ].flatMap(([sourceName, raw]) => {
-      const skill = toSkill(raw, sourceName);
+      const skill = toSkillConfig(raw, sourceName);
       return skill === null ? [] : [skill];
     });
   }
   return cached;
-}
-
-export function getSkillByName(name: string): Skill | undefined {
-  return getBundledSkills().find((skill) => skill.name === name);
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-/**
- * System-prompt block listing available skills (progressive disclosure).
- * Unlike pi's stock formatter, instructions point at the host's load_skill
- * tool because this environment has no file-read tool.
- */
-export function formatSkillsForSystemPrompt(skills: Skill[]): string {
-  const visible = skills.filter((skill) => !skill.disableModelInvocation);
-  if (visible.length === 0) {
-    return "";
-  }
-  const lines = [
-    "The following skills provide specialized, battle-tested instructions for specific tasks.",
-    "When your task matches a skill's description, first call the load_skill tool with that skill's name and follow its instructions.",
-    "",
-    "<available_skills>",
-  ];
-  for (const skill of visible) {
-    lines.push("  <skill>");
-    lines.push(`    <name>${escapeXml(skill.name)}</name>`);
-    lines.push(
-      `    <description>${escapeXml(skill.description)}</description>`,
-    );
-    lines.push("  </skill>");
-  }
-  lines.push("</available_skills>");
-  return lines.join("\n");
-}
-
-/**
- * Full instruction payload returned by the load_skill tool, mirroring pi's
- * formatSkillInvocation without the filesystem-location preamble.
- */
-export function formatSkillPayload(skill: Skill): string {
-  return `<skill name="${escapeXml(skill.name)}">\n\n${skill.content}\n\n</skill>`;
 }

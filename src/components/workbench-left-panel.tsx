@@ -1,8 +1,8 @@
 "use client";
 
 import { useTranslation } from "react-i18next";
-import { AgentChat } from "@/components/agent/agent-chat";
 import { CheckIcon, HistoryIcon } from "@/components/agent/icons";
+import { TikzAgentPanel } from "@/components/agent/reagent-panel";
 import { type TagSuggestion, TexTagInput } from "@/components/tex-tag-input";
 import { TikzEditor } from "@/components/tikz-editor";
 import {
@@ -17,7 +17,6 @@ import type { LeftTab } from "@/lib/workbench-state";
 interface Props {
   code: string;
   leftTab: LeftTab;
-  currentDocId: string | null;
   busy: boolean;
   agentBridge: EditorMutationBridge;
   nextVersionNo: number | null;
@@ -43,7 +42,6 @@ const TAB_PILL =
 export function WorkbenchLeftPanel({
   code,
   leftTab,
-  currentDocId,
   busy,
   agentBridge,
   nextVersionNo,
@@ -161,11 +159,7 @@ export function WorkbenchLeftPanel({
         </div>
       </div>
       <div className={leftTab === "assistant" ? "min-h-0 flex-1" : "hidden"}>
-        <AgentChat
-          bridge={agentBridge}
-          docId={currentDocId}
-          className="h-full"
-        />
+        <TikzAgentPanel agentBridge={agentBridge} className="h-full" />
       </div>
       <VersionBrowser
         open={versionsOpen}
