@@ -1,5 +1,3 @@
-"use client";
-
 import type { ImageContent } from "@earendil-works/pi-ai";
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";

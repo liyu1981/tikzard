@@ -1,5 +1,3 @@
-"use client";
-
 import { useTranslation } from "react-i18next";
 import { CheckIcon, HistoryIcon } from "@/components/agent/icons";
 import { TikzAgentPanel } from "@/components/agent/reagent-panel";

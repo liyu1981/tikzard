@@ -1,5 +1,3 @@
-"use client";
-
 import { useAtomValue } from "jotai";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";

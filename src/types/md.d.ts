@@ -1,5 +1,5 @@
-// Raw-text imports for bundled agent skills (loaded via webpack asset/source).
-declare module "*.md" {
+// Raw-text imports for bundled agent skills (Vite `?raw`).
+declare module "*.md?raw" {
   const content: string;
   export default content;
 }

@@ -1,5 +1,3 @@
-"use client";
-
 import hljs from "highlight.js/lib/core";
 import latex from "highlight.js/lib/languages/latex";
 import { useEffect, useMemo, useRef, useState } from "react";

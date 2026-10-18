@@ -1,5 +1,3 @@
-"use client";
-
 import { useSetAtom } from "jotai";
 import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";

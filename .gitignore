@@ -3,10 +3,8 @@ mkcert/
 # dependencies
 node_modules/
 
-# next.js
-.next/
-out/
-next-env.d.ts
+# build output
+dist/
 *.tsbuildinfo
 
 # dev daemon

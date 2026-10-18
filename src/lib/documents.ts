@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * IndexedDB-backed document store for the workbench. Documents live entirely
  * on-device: { id, title, code, updatedAt, thumbnail? }. The API is

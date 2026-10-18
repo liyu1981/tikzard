@@ -1,5 +1,3 @@
-"use client";
-
 import { atom, getDefaultStore } from "jotai";
 
 export interface CompileLogEntry {

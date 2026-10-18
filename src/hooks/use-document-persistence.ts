@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import type { Status } from "@/components/workbench-types";
 import { saveDocument, setLastOpenedDocId } from "@/lib/documents";

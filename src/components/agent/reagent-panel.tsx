@@ -1,5 +1,3 @@
-"use client";
-
 import {
   makeTranslator,
   ReAgentComposer,

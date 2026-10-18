@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef } from "react";
 
 const HUES = [200, 260, 320, 170, 30, 355];

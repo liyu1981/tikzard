@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Rasterize the TikZJax-rendered preview <svg> into PNG bitmaps.
  *

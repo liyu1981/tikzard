@@ -1,5 +1,3 @@
-"use client";
-
 import { zlibSync } from "fflate";
 
 /**

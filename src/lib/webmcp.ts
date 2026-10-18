@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * WebMCP bridge: expose the workbench's agent tools to the page through the
  * `document.modelContext` API so ReAgent auto-discovers them (no

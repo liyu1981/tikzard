@@ -1,5 +1,3 @@
-"use client";
-
 import type * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDuration, type Status } from "@/components/workbench-types";

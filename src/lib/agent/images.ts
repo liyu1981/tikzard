@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Client-side intake for images attached to agent chat messages: validate,
  * optionally downscale huge uploads, and produce pi-ai `ImageContent` blocks

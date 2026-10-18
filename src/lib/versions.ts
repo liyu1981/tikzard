@@ -1,5 +1,3 @@
-"use client";
-
 import { VERSIONS_STORE_NAME, withStore } from "@/lib/documents";
 
 export type VersionSource = "manual" | "agent";

@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * One-time wiring of the tikzard app state into ReAgent's stores.
  *

@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * View-only helper coordinate grid.
  *

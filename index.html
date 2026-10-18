@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TikZard | Local-first TikZ editor</title>
+    <meta
+      name="description"
+      content="Create, preview, annotate, and export TikZ diagrams in a private, local-first web workbench."
+    />
+    <meta name="application-name" content="TikZard" />
+    <meta name="author" content="TikZard" />
+    <meta name="creator" content="TikZard" />
+    <meta name="publisher" content="TikZard" />
+    <meta name="category" content="technology" />
+    <meta
+      name="keywords"
+      content="TikZ editor, LaTeX diagrams, TikZ preview, diagram editor, local-first, offline-first"
+    />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TikZard" />
+    <meta property="og:title" content="TikZard | Local-first TikZ editor" />
+    <meta
+      property="og:description"
+      content="Create, preview, annotate, and export TikZ diagrams in a private, local-first web workbench."
+    />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="TikZard | Local-first TikZ editor" />
+    <meta
+      name="twitter:description"
+      content="Create, preview, annotate, and export TikZ diagrams in a private, local-first web workbench."
+    />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="stylesheet" href="/tikzjax/fonts.min.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "TikZard",
+        "description": "A private, local-first web workbench for creating, previewing, annotating, and exporting TikZ diagrams.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Web Browser",
+        "browserRequirements": "Requires JavaScript",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "TikZ source editing",
+          "Live SVG preview",
+          "Diagram annotations",
+          "PNG and PDF export",
+          "Local document storage"
+        ]
+      }
+    </script>
+    <script>
+      (() => {
+        try {
+          const t = localStorage.getItem("tikzard-theme") || "system";
+          const d =
+            t === "dark" ||
+            (t === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          const el = document.documentElement;
+          el.classList.toggle("dark", d);
+          el.style.colorScheme = d ? "dark" : "light";
+        } catch {}
+      })();
+    </script>
+  </head>
+  <body class="ambient-bg antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

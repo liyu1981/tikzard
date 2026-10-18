@@ -1,5 +1,3 @@
-"use client";
-
 declare global {
   interface Window {
     TikzJaxOptions?: Record<string, unknown>;

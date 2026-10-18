@@ -1,5 +1,3 @@
-"use client";
-
 import { useAtomValue, useSetAtom } from "jotai";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
@@ -208,7 +206,6 @@ function DocThumb({ url }: { url?: string }) {
     );
   }
   return (
-    // biome-ignore lint/performance/noImgElement: IndexedDB blob URLs can't go through next/image's server optimizer in this offline-first app
     <img
       src={url}
       alt=""

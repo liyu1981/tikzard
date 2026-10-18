@@ -10,10 +10,10 @@
  * the full instructions are loaded on demand through ReAgent's built-in
  * `use_skill` tool.
  */
-import tikzCoreStyle from "./skills/tikz-core-style/SKILL.md";
-import tikzDomainPackages from "./skills/tikz-domain-packages/SKILL.md";
-import tikzFunctionPlots from "./skills/tikz-function-plots/SKILL.md";
-import tikzNodesDiagrams from "./skills/tikz-nodes-diagrams/SKILL.md";
+import tikzCoreStyle from "./skills/tikz-core-style/SKILL.md?raw";
+import tikzDomainPackages from "./skills/tikz-domain-packages/SKILL.md?raw";
+import tikzFunctionPlots from "./skills/tikz-function-plots/SKILL.md?raw";
+import tikzNodesDiagrams from "./skills/tikz-nodes-diagrams/SKILL.md?raw";
 
 const MAX_NAME_LENGTH = 64;
 const MAX_DESCRIPTION_LENGTH = 1024;

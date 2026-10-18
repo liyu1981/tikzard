@@ -1,11 +1,7 @@
-"use client";
-
 import { atom, useAtomValue } from "jotai";
-import Image from "next/image";
 import { type ComponentType, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import tikzardLogo from "@/app/icon.svg";
 import {
   CheckIcon,
   GithubIcon,
@@ -172,8 +168,8 @@ function AboutPanel() {
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-5 text-center">
       {/* The artwork carries its own rounded-tile background and glow */}
-      <Image
-        src={tikzardLogo}
+      <img
+        src="/icon.svg"
         alt=""
         draggable={false}
         className="size-64 shrink-0"

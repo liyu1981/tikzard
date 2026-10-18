@@ -1,5 +1,4 @@
-"use client";
-
+import { createFileRoute } from "@tanstack/react-router";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,7 +30,7 @@ import {
   packagesAtom,
 } from "@/lib/workbench-state";
 
-export default function Home() {
+function Home() {
   const { t } = useTranslation();
   const entryGate = useAtomValue(entryGateAtom);
   const setEntryGate = useSetAtom(entryGateAtom);
@@ -166,3 +165,7 @@ export default function Home() {
     </main>
   );
 }
+
+export const Route = createFileRoute("/")({
+  component: Home,
+});

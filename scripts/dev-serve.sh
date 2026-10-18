@@ -21,7 +21,7 @@ if [ -f .dev/dev.log ]; then
 fi
 
 # Own process group so dev-stop.sh can kill the entire tree
-# (pnpm wrapper + next child).
+# (pnpm wrapper + vite child).
 setsid nohup pnpm dev >.dev/dev.log 2>&1 &
 echo $! >.dev/dev.pid
 

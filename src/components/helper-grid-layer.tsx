@@ -1,5 +1,3 @@
-"use client";
-
 import type { HelperGridMapping } from "@/lib/helper-grid";
 
 const GRID_LINE = "rgba(0, 0, 0, 0.28)";

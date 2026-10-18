@@ -1,5 +1,3 @@
-"use client";
-
 import type * as React from "react";
 import { useMemo } from "react";
 import type { Status } from "@/components/workbench-types";

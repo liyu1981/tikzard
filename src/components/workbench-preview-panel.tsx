@@ -1,5 +1,3 @@
-"use client";
-
 import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { PencilIcon } from "@/components/agent/icons";

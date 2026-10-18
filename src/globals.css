@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "@liyu1981/reagent/styles.css";
-@source "../../node_modules/@liyu1981/reagent/dist";
+@source "../node_modules/@liyu1981/reagent/dist";
 
 /* ReAgent (and the app's own `dark:` utilities) key off a `.dark` class on
    an ancestor rather than the OS media query, matching the theme switcher. */

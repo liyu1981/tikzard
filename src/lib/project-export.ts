@@ -1,5 +1,3 @@
-"use client";
-
 import { loadDocument } from "@/lib/documents";
 import { downloadBlob, toFileSlug } from "@/lib/image-export";
 import { getVersions, type TikzVersion } from "@/lib/versions";
