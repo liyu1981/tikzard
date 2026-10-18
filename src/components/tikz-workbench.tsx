@@ -21,6 +21,7 @@ import {
   codeAtom,
   currentDocIdAtom,
   docTitleAtom,
+  helperGridAtom,
   leftTabAtom,
   librariesAtom,
   packagesAtom,
@@ -46,6 +47,7 @@ export function TikzWorkbench() {
   const setPendingAnnotation = useSetAtom(pendingAnnotationAtom);
   const [packages, setPackages] = useAtom(packagesAtom);
   const [libraries, setLibraries] = useAtom(librariesAtom);
+  const [helperGrid, setHelperGrid] = useAtom(helperGridAtom);
   const [rightTab, setRightTab] = useState<RightTab>("preview");
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [saveVersionState, setSaveVersionState] = useState<
@@ -72,7 +74,7 @@ export function TikzWorkbench() {
     renderSeqRef,
     statusRef,
     doneInfoMsRef,
-  } = useTikzRenderer({ code, stageRef, t, packages, libraries });
+  } = useTikzRenderer({ code, stageRef, t, packages, libraries, helperGrid });
   const {
     zoom,
     setZoom,
@@ -218,11 +220,13 @@ export function TikzWorkbench() {
         zoom={zoom}
         exporting={exporting}
         annotating={annotating}
+        helperGrid={helperGrid}
         previewHostEl={previewHostEl}
         stageRef={stageRef}
         canvasRef={canvasRef}
         onRightTabChange={setRightTab}
         onAnnotateToggle={handleAnnotateToggle}
+        onHelperGridToggle={() => setHelperGrid((value) => !value)}
         onFit={fitView}
         onZoomChange={setZoom}
         onExportCopy={() => void handleCopyImage()}

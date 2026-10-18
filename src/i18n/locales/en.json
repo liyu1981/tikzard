@@ -85,6 +85,7 @@
     "libraryGeneric": "TikZ/PGF library",
     "versionRestored": "Restored version {{number}}",
     "annotate": "Annotate",
+    "helperGrid": "Coordinate grid",
     "annotatePen": "Pen",
     "annotateText": "Text",
     "annotateRect": "Rectangle",

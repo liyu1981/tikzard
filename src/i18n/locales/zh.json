@@ -85,6 +85,7 @@
     "libraryGeneric": "TikZ/PGF 库",
     "versionRestored": "已恢复版本 {{number}}",
     "annotate": "标注",
+    "helperGrid": "坐标辅助网格",
     "annotatePen": "画笔",
     "annotateText": "文字",
     "annotateRect": "矩形",

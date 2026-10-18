@@ -9,6 +9,7 @@ import {
   pushCompileLog,
   setRenderFailureListener,
 } from "@/lib/compile-logs";
+import { withHelperGrid } from "@/lib/helper-grid";
 import { ensureTikzJax } from "@/lib/tikzjax";
 
 const AUTO_RENDER_DELAY_MS = 600;
@@ -20,6 +21,8 @@ interface Props {
   t: (key: string, options?: Record<string, unknown>) => string;
   packages: string[];
   libraries: string[];
+  /** Draw the view-only helper coordinate grid under the drawing. */
+  helperGrid: boolean;
 }
 
 export function useTikzRenderer({
@@ -28,6 +31,7 @@ export function useTikzRenderer({
   t,
   packages,
   libraries,
+  helperGrid,
 }: Props) {
   const [status, setStatus] = useState<Status>("booting");
   const [doneInfo, setDoneInfo] = useState<{ at: number; ms: number } | null>(
@@ -35,6 +39,7 @@ export function useTikzRenderer({
   );
   const [nowTick, setNowTick] = useState(() => Date.now());
   const lastRenderedCodeRef = useRef<string | null>(null);
+  const lastRenderedHelperGridRef = useRef(false);
   const lastRenderedPackagesRef = useRef<string>("");
   const lastRenderedLibrariesRef = useRef<string>("");
   const renderSeqRef = useRef(0);
@@ -64,6 +69,7 @@ export function useTikzRenderer({
       host.replaceChildren();
       renderStartRef.current = performance.now();
       lastRenderedCodeRef.current = source;
+      lastRenderedHelperGridRef.current = helperGrid;
       lastRenderedPackagesRef.current = packages.join(",");
       lastRenderedLibrariesRef.current = libraries.join(",");
       renderSeqRef.current += 1;
@@ -81,10 +87,10 @@ export function useTikzRenderer({
       if (libraries.length > 0) {
         el.setAttribute("data-tikz-libraries", libraries.join(","));
       }
-      el.textContent = source;
+      el.textContent = helperGrid ? withHelperGrid(source) : source;
       host.appendChild(el);
     },
-    [stageRef, packages, libraries],
+    [stageRef, packages, libraries, helperGrid],
   );
 
   useEffect(() => {
@@ -117,10 +123,11 @@ export function useTikzRenderer({
     }
     const packagesKey = packages.join(",");
     const librariesKey = libraries.join(",");
-    // Skip only when neither the source nor the package/library selections
-    // changed.
+    // Skip only when neither the source, the helper grid, nor the
+    // package/library selections changed.
     if (
       code === lastRenderedCodeRef.current &&
+      helperGrid === lastRenderedHelperGridRef.current &&
       packagesKey === lastRenderedPackagesRef.current &&
       librariesKey === lastRenderedLibrariesRef.current
     ) {
@@ -131,7 +138,7 @@ export function useTikzRenderer({
       AUTO_RENDER_DELAY_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [code, packages, libraries, renderNow, status]);
+  }, [code, packages, libraries, helperGrid, renderNow, status]);
 
   useEffect(() => {
     setRenderFailureListener(() => setStatus("timeout"));

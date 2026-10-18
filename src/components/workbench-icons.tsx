@@ -81,3 +81,23 @@ export function PdfFileIcon(props: React.ComponentProps<"svg">) {
     </svg>
   );
 }
+
+export function GridIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M3 3h18v18H3z" />
+      <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
+    </svg>
+  );
+}

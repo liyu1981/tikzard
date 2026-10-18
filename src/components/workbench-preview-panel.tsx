@@ -16,6 +16,7 @@ import {
 import {
   CopyIcon,
   ExportIcon,
+  GridIcon,
   ImageFileIcon,
   PdfFileIcon,
 } from "@/components/workbench-icons";
@@ -36,11 +37,13 @@ interface Props {
   zoom: number;
   exporting: boolean;
   annotating: boolean;
+  helperGrid: boolean;
   previewHostEl: HTMLDivElement | null;
   stageRef: React.RefObject<HTMLDivElement | null>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   onRightTabChange: (tab: RightTab) => void;
   onAnnotateToggle: () => void;
+  onHelperGridToggle: () => void;
   onFit: () => void;
   onZoomChange: (zoom: number | ((current: number) => number)) => void;
   onExportCopy: () => void;
@@ -59,11 +62,13 @@ export function WorkbenchPreviewPanel({
   zoom,
   exporting,
   annotating,
+  helperGrid,
   previewHostEl,
   stageRef,
   canvasRef,
   onRightTabChange,
   onAnnotateToggle,
+  onHelperGridToggle,
   onFit,
   onZoomChange,
   onExportCopy,
@@ -114,6 +119,16 @@ export function WorkbenchPreviewPanel({
         </div>
         {rightTab === "preview" && (
           <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label={t("workbench.helperGrid")}
+              title={t("workbench.helperGrid")}
+              aria-pressed={helperGrid}
+              onClick={onHelperGridToggle}
+              className={`rounded-full border border-border/50 bg-background/70 p-1.5 shadow-sm backdrop-blur-md transition duration-150 hover:bg-foreground/[0.08] hover:text-foreground active:scale-[0.95] ${helperGrid ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
+            >
+              <GridIcon className="size-3.5" />
+            </button>
             <button
               type="button"
               aria-label={t("workbench.annotate")}

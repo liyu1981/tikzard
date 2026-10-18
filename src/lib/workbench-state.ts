@@ -2,6 +2,7 @@
 
 import type { ImageContent } from "@earendil-works/pi-ai";
 import { atom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
 
 export const EXAMPLE_CODE = String.raw`\begin{tikzpicture}
   % draw x axis with arrow tip, labeled $x$
@@ -74,3 +75,10 @@ export interface PendingAnnotation {
 }
 
 export const pendingAnnotationAtom = atom<PendingAnnotation | null>(null);
+
+/**
+ * Whether the preview draws the helper coordinate grid under the drawing.
+ * A view-only preference: it is injected at render time and never becomes
+ * part of the saved document source or its versions.
+ */
+export const helperGridAtom = atomWithStorage("tikzard-helper-grid", false);
