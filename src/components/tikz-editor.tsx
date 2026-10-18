@@ -19,9 +19,12 @@ const EDITOR_PADDING = 12;
 export function TikzEditor({
   value,
   onChange,
+  readOnly = false,
 }: {
   value: string;
   onChange: (value: string) => void;
+  /** Render a highlighted, non-editable viewer (used by the version browser). */
+  readOnly?: boolean;
 }) {
   ensureLatex();
   const preRef = useRef<HTMLPreElement>(null);
@@ -102,16 +105,17 @@ export function TikzEditor({
         </pre>
         <textarea
           ref={textareaRef}
-          id="tikz-source"
+          id={readOnly ? undefined : "tikz-source"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onSelect={syncOverlays}
           onScroll={syncOverlays}
+          readOnly={readOnly}
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
           wrap="off"
-          className="absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent p-3 font-mono text-sm whitespace-pre leading-5 text-transparent caret-foreground outline-none"
+          className={`absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent p-3 font-mono text-sm whitespace-pre leading-5 text-transparent caret-foreground outline-none ${readOnly ? "cursor-default" : ""}`}
         />
       </div>
     </div>

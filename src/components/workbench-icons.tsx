@@ -101,3 +101,24 @@ export function GridIcon(props: React.ComponentProps<"svg">) {
     </svg>
   );
 }
+
+export function DiffIcon(props: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M12 3v18" />
+      <path d="M5 9h4M7 7v4" />
+      <path d="M15 15h4" />
+    </svg>
+  );
+}
