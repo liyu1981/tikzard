@@ -31,9 +31,10 @@ import { useTranslation } from "react-i18next";
 import { ensureAgentState } from "@/lib/agent/bootstrap";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
 import { imageContentToFile } from "@/lib/agent/images";
-import { buildTikzToolDescriptors } from "@/lib/agent/tools";
+import { buildTikzToolDescriptors, buildTikzTools } from "@/lib/agent/tools";
 import { pushCompileLog } from "@/lib/compile-logs";
 import { cn } from "@/lib/utils";
+import { hasWebMcp, registerWebMcpTools } from "@/lib/webmcp";
 import { pendingAnnotationAtom } from "@/lib/workbench-state";
 import { MarkdownView } from "./markdown";
 
@@ -158,10 +159,20 @@ export function TikzAgentPanel({
   const { i18n } = useTranslation();
   const theme = useResolvedTheme();
 
+  // When WebMCP is available (native or polyfilled), the tools are exposed on
+  // `document.modelContext` and ReAgent auto-discovers them; otherwise fall
+  // back to host-provided descriptors so the agent never loses its tools.
+  const webmcpAvailable = useMemo(() => hasWebMcp(), []);
   const extraDescriptors = useMemo(
-    () => buildTikzToolDescriptors(agentBridge),
-    [agentBridge],
+    () => (webmcpAvailable ? [] : buildTikzToolDescriptors(agentBridge)),
+    [webmcpAvailable, agentBridge],
   );
+  useEffect(() => {
+    if (!webmcpAvailable) {
+      return;
+    }
+    return registerWebMcpTools(buildTikzTools(agentBridge));
+  }, [webmcpAvailable, agentBridge]);
   const fallback = useMemo(() => makeTranslator(), []);
   const translate = useCallback<ReAgentTranslate>(
     (key, vars) => {

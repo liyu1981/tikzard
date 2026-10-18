@@ -53,7 +53,7 @@ function requireBridge(
   return bridge;
 }
 
-function buildTikzTools(bridge?: EditorMutationBridge): AgentTool[] {
+export function buildTikzTools(bridge?: EditorMutationBridge): AgentTool[] {
   const getSource = tool({
     name: "get_tikz_source",
     label: "Read TikZ source",
