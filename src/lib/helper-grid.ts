@@ -1,77 +1,33 @@
 "use client";
 
 /**
- * View-only helper coordinate grid for the preview.
+ * View-only helper coordinate grid.
  *
- * The grid is injected as the first layer inside the user's own
- * `tikzpicture` and therefore shares its coordinate system and scaling: its
- * origin is exactly the user's `(0,0)`, and its marks are labelled in the
- * user's coordinate values. It is applied only at render time — never written
- * back to the editor, versions, or the assistant's tools.
+ * The grid is NOT drawn in TikZ (a fixed coordinate range could never fill an
+ * arbitrary canvas). Instead it is an HTML/CSS layer behind the rendered svg,
+ * sized to the canvas, with its cell size and origin anchored to the drawing's
+ * own coordinate system.
  *
- * The grid is native TikZ (\draw grid, nodes, ticks) with no extra packages
- * or libraries, so it compiles anywhere the user's own document does.
+ * To recover that coordinate system from the compiled svg, two invisible
+ * calibration paths are injected into the picture. They use `overlay`, so they
+ * never affect the drawing's bounding box, and their screen transform yields
+ * the origin and the size of one coordinate unit. The grid layer can then draw
+ * integer-aligned lines that fill any canvas, at any zoom, without recompiling.
  */
 
-const MARKER = "% tikzard-helper-grid";
+const MARKER = "% tikzard-grid-calibration";
 
-/** Half-extent of the helper grid, in the document's own coordinate units. */
-const X_MIN = -6;
-const X_MAX = 6;
-const Y_MIN = -4;
-const Y_MAX = 4;
-
-function buildGridTex(): string {
-  const lines: string[] = [MARKER, "\\begin{scope}"];
-  // Graph paper: one line per coordinate unit, light so it stays behind the
-  // drawing but dark enough to read against white paper.
-  lines.push(
-    `  \\draw[step=1, gray!55, line width=0.2pt] (${X_MIN},${Y_MIN}) grid (${X_MAX},${Y_MAX});`,
-  );
-  // Axes drawn through the origin (darker, with arrow tips and labels).
-  lines.push(
-    `  \\draw[->, thick, gray!80!black] (${X_MIN},0) -- (${X_MAX},0) node[right, font=\\small, black, inner sep=2pt] {$x$};`,
-  );
-  lines.push(
-    `  \\draw[->, thick, gray!80!black] (0,${Y_MIN}) -- (0,${Y_MAX}) node[above, font=\\small, black, inner sep=2pt] {$y$};`,
-  );
-  // Integer tick marks and numeric labels, skipping 0 (marked as origin).
-  for (let x = X_MIN + 1; x <= X_MAX - 1; x += 1) {
-    if (x === 0) {
-      continue;
-    }
-    lines.push(
-      `  \\draw[gray!70, line width=0.3pt] (${x},-0.08) -- (${x},0.08);`,
-    );
-    lines.push(
-      `  \\node[below, font=\\tiny, gray!70!black, inner sep=1pt] at (${x},-0.1) {${x}};`,
-    );
-  }
-  for (let y = Y_MIN + 1; y <= Y_MAX - 1; y += 1) {
-    if (y === 0) {
-      continue;
-    }
-    lines.push(
-      `  \\draw[gray!70, line width=0.3pt] (-0.08,${y}) -- (0.08,${y});`,
-    );
-    lines.push(
-      `  \\node[left, font=\\tiny, gray!70!black, inner sep=1pt] at (-0.1,${y}) {${y}};`,
-    );
-  }
-  lines.push(
-    "  \\fill[gray!80!black] (0,0) circle (1.1pt) node[below left, font=\\tiny, gray!70!black, inner sep=1.5pt] {$O$};",
-  );
-  lines.push("\\end{scope}");
-  return lines.join("\n");
-}
-
-const GRID_TEX = buildGridTex();
+const CALIBRATION = [
+  MARKER,
+  "  \\draw[overlay, opacity=0] (0,0) -- (1,0);",
+  "  \\draw[overlay, opacity=0] (0,0) -- (0,1);",
+].join("\n");
 
 /**
- * Inject the helper grid into a `tikzpicture` source. Idempotent, and a no-op
- * when the source is not (yet) a tikzpicture.
+ * Inject the two calibration paths as the first commands of the user's
+ * `tikzpicture`. Idempotent, and a no-op when the source is not a tikzpicture.
  */
-export function withHelperGrid(source: string): string {
+export function withGridCalibration(source: string): string {
   if (source.includes(MARKER)) {
     return source;
   }
@@ -79,6 +35,87 @@ export function withHelperGrid(source: string): string {
   if (match === null) {
     return source;
   }
-  const insertAt = match.index + match[0].length;
-  return `${source.slice(0, insertAt)}\n${GRID_TEX}\n${source.slice(insertAt)}`;
+  const at = match.index + match[0].length;
+  return `${source.slice(0, at)}\n${CALIBRATION}\n${source.slice(at)}`;
+}
+
+/** Origin and unit size of the drawing's coordinate system, in canvas px. */
+export interface HelperGridMapping {
+  originX: number;
+  originY: number;
+  /** Screen offset of one X coordinate unit (signed). */
+  cellX: number;
+  /** Screen offset of one Y coordinate unit (signed; negative = upward). */
+  cellY: number;
+  /** Size of the layer, matching the canvas's scrollable content. */
+  width: number;
+  height: number;
+}
+
+const PATH_RE = /M\s*(-?[\d.]+)\s+(-?[\d.]+)\s+L\s*(-?[\d.]+)\s+(-?[\d.]+)/;
+
+function parseSegment(path: SVGPathElement): {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+} | null {
+  const match = PATH_RE.exec(path.getAttribute("d") ?? "");
+  return match === null
+    ? null
+    : { x0: +match[1], y0: +match[2], x1: +match[3], y1: +match[4] };
+}
+
+/**
+ * Read the coordinate mapping from the calibration paths in the rendered svg,
+ * expressed relative to the canvas's own scrollable content box.
+ */
+export function readHelperGridMapping(
+  canvas: HTMLElement | null,
+): HelperGridMapping | null {
+  if (canvas === null) {
+    return null;
+  }
+  const svg = canvas.querySelector("svg");
+  if (svg === null) {
+    return null;
+  }
+  const paths = svg.querySelectorAll("path");
+  if (paths.length < 2) {
+    return null;
+  }
+  const first = parseSegment(paths[0] as SVGPathElement);
+  const second = parseSegment(paths[1] as SVGPathElement);
+  const m0 = (paths[0] as SVGPathElement).getScreenCTM();
+  const m1 = (paths[1] as SVGPathElement).getScreenCTM();
+  if (first === null || second === null || m0 === null || m1 === null) {
+    return null;
+  }
+  const rect = canvas.getBoundingClientRect();
+  // Screen px -> the visible canvas box (the grid layer sits fixed behind it).
+  const toViewport = (m: DOMMatrix, x: number, y: number) => ({
+    x: m.a * x + m.c * y + m.e - rect.left,
+    y: m.b * x + m.d * y + m.f - rect.top,
+  });
+  const origin = toViewport(m0, first.x0, first.y0);
+  const unitX = toViewport(m0, first.x1, first.y1);
+  const unitY = toViewport(m1, second.x1, second.y1);
+  const cellX = unitX.x - origin.x;
+  const cellY = unitY.y - origin.y;
+  if (
+    !Number.isFinite(cellX) ||
+    !Number.isFinite(cellY) ||
+    Math.abs(cellX) < 0.01 ||
+    Math.abs(cellY) < 0.01
+  ) {
+    return null;
+  }
+  return {
+    originX: origin.x,
+    originY: origin.y,
+    cellX,
+    cellY,
+    width: canvas.clientWidth,
+    height: canvas.clientHeight,
+  };
 }

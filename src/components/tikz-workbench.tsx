@@ -9,6 +9,7 @@ import { WorkbenchPreviewPanel } from "@/components/workbench-preview-panel";
 import type { RightTab } from "@/components/workbench-types";
 import { useAgentWorkbenchBridge } from "@/hooks/use-agent-workbench-bridge";
 import { useDocumentPersistence } from "@/hooks/use-document-persistence";
+import { useHelperGrid } from "@/hooks/use-helper-grid";
 import { useTikzRenderer } from "@/hooks/use-tikz-renderer";
 import { useWorkbenchPreview } from "@/hooks/use-workbench-preview";
 import { useWorkbenchVersions } from "@/hooks/use-workbench-versions";
@@ -77,6 +78,7 @@ export function TikzWorkbench() {
   } = useTikzRenderer({ code, stageRef, t, packages, libraries, helperGrid });
   const {
     zoom,
+    displayScale,
     setZoom,
     zoomRef,
     exporting,
@@ -89,12 +91,21 @@ export function TikzWorkbench() {
   } = useWorkbenchPreview({
     docTitle,
     status,
+    annotating,
     stageRef,
     canvasRef,
     setLeftTab,
     setPendingAnnotation,
     t,
   });
+
+  // Align the HTML helper grid with the rendered drawing's coordinate system.
+  const grid = useHelperGrid(
+    canvasRef,
+    helperGrid,
+    `${doneInfo?.at ?? 0}:${displayScale}`,
+    annotating,
+  );
   useDocumentPersistence({
     code,
     docTitle,
@@ -218,9 +229,11 @@ export function TikzWorkbench() {
         doneInfo={doneInfo}
         nowTick={nowTick}
         zoom={zoom}
+        displayScale={displayScale}
         exporting={exporting}
         annotating={annotating}
         helperGrid={helperGrid}
+        grid={grid}
         previewHostEl={previewHostEl}
         stageRef={stageRef}
         canvasRef={canvasRef}
@@ -232,9 +245,9 @@ export function TikzWorkbench() {
         onExportCopy={() => void handleCopyImage()}
         onExportPng={() => void handleExportPng()}
         onExportPdf={() => void handleExportPdf()}
-        onAnnotateFinish={(hasContent) => {
+        onAnnotateFinish={(hasContent, overlay) => {
           setAnnotating(false);
-          handleAnnotateFinish(hasContent);
+          handleAnnotateFinish(hasContent, overlay);
         }}
         onAnnotateCancel={() => setAnnotating(false)}
         onPreviewHostChange={setPreviewHostEl}

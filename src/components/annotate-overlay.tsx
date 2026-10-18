@@ -12,27 +12,15 @@ import {
 } from "@/components/agent/icons";
 
 /**
- * Annotation layer drawn straight into the TikZJax-rendered preview <svg>:
- * freehand strokes, rectangle/ellipse/arrow shapes, and text labels become
- * real SVG nodes inside a dedicated <g data-annotation-layer> group appended
- * to the artwork svg. Marks therefore live in the artwork's own coordinate
- * system (pt user units) — they stay registered at any zoom or panel size,
- * and ride along when the svg is cloned and serialized for the annotated
- * snapshot; no compositing math is needed.
+ * Annotation layer.
  *
- * Ops are kept in a list and re-rendered declaratively through a portal into
- * the group, which makes undo/clear trivial. A TikZ recompile replaces the
- * svg node (marks are temporary by design); the observer recreates the group
- * on the fresh node and the same ops re-appear.
+ * It is a self-contained, transparent SVG surface stacked above the rendered
+ * drawing (grid < drawing < this < toolbar). Marks live in the container's own
+ * pixel space — the layer always covers the whole preview edge to edge, so
+ * drawing never depends on the generated TikZ svg's viewBox, zoom or internal
+ * structure. The finishing step composites this surface over the drawing.
  */
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-/**
- * Font for committed text labels. Must be one of the families vendored under
- * /tikzjax/fonts so the export rasterizer can inline it as base64 @font-face
- * (standalone SVGs loaded via <img> cannot fetch external resources).
- */
 const ANNOTATE_FONT_FAMILY = "cmr10";
 
 /** Marker palette offered in the toolbar (contrast-safe on white previews). */
@@ -45,6 +33,12 @@ const ANNOTATE_COLORS = [
   { key: "pink", value: "#ec4899" },
   { key: "black", value: "#171717" },
 ] as const;
+
+/** Fixed screen-space stroke width / text size, in layer pixels. */
+const STROKE_WIDTH = 2.5;
+const FONT_SIZE = 16;
+/** Shapes smaller than this (px) on either axis count as stray clicks. */
+const MIN_SHAPE_PX = 3;
 
 type AnnotateTool = "pen" | "text" | "rect" | "ellipse" | "arrow";
 
@@ -61,7 +55,6 @@ interface OpBase {
 interface StrokeOp extends OpBase {
   kind: "stroke";
   color: string;
-  /** Stroke width in svg user units (pt), frozen at draw time. */
   width: number;
   points: Pt[];
 }
@@ -80,9 +73,8 @@ interface ShapeOp extends OpBase {
 interface TextOp extends OpBase {
   kind: "text";
   color: string;
-  /** Font size in svg user units (pt), frozen at creation time. */
   size: number;
-  /** Anchor is the top-left of the label, in svg user units. */
+  /** Anchor is the top-left of the label, in layer pixels. */
   x: number;
   y: number;
   text: string;
@@ -90,29 +82,20 @@ interface TextOp extends OpBase {
 
 type AnnotateOp = StrokeOp | ShapeOp | TextOp;
 
-/** Shapes smaller than this (screen px) on either axis count as stray clicks. */
-const MIN_SHAPE_PX = 3;
-
 interface TextDraft {
-  /** Anchor in svg user units (top-left of the future label). */
-  ux: number;
-  uy: number;
-  /** Editor position in CSS px relative to the preview panel host. */
+  /** Anchor in layer pixels (top-left of the future label). */
   x: number;
   y: number;
-  /** Frozen font size in svg user units. */
   size: number;
-  /** Same size in screen px, so the input previews the real rendered size. */
   fontPx: number;
   value: string;
 }
 
 interface AnnotateLayerProps {
-  /** Portal target: the positioned preview panel host element. */
+  /** The preview host the layer covers and positions against. */
   mount: HTMLDivElement;
-  /** Zoomed stage that contains the generated svg. */
-  stage: HTMLDivElement | null;
-  onFinish: (hasContent: boolean) => void;
+  /** `overlay` is the finished surface, for compositing onto the snapshot. */
+  onFinish: (hasContent: boolean, overlay: SVGSVGElement | null) => void;
   onCancel: () => void;
 }
 
@@ -220,254 +203,6 @@ function fx(value: number): number {
   return Number(value.toFixed(2));
 }
 
-/** Stroke width in svg user units (pt), proportional to the artwork size. */
-function strokeWidthFor(svg: SVGSVGElement): number {
-  const box = svg.viewBox.baseVal;
-  return Math.max(1, Math.min(box.width, box.height) / 200);
-}
-
-/** Annotation font size in svg user units (pt), proportional to artwork. */
-function fontSizeFor(svg: SVGSVGElement): number {
-  const box = svg.viewBox.baseVal;
-  return Math.max(9, Math.round(Math.min(box.width, box.height) / 26));
-}
-
-/**
- * Screen px → svg user units via the viewBox and the visual rect.
- * getBoundingClientRect already includes CSS zoom/scroll, so this linear map
- * stays exact at any zoom without relying on getScreenCTM.
- */
-function toUserPoint(
-  svg: SVGSVGElement,
-  clientX: number,
-  clientY: number,
-): Pt | null {
-  const rect = svg.getBoundingClientRect();
-  const box = svg.viewBox.baseVal;
-  if (
-    rect.width <= 0 ||
-    rect.height <= 0 ||
-    box.width <= 0 ||
-    box.height <= 0
-  ) {
-    return null;
-  }
-  return {
-    x: box.x + ((clientX - rect.left) * box.width) / rect.width,
-    y: box.y + ((clientY - rect.top) * box.height) / rect.height,
-  };
-}
-
-/** User units per screen px, for converting pixel thresholds. */
-function unitsPerScreenPx(svg: SVGSVGElement): number {
-  const rect = svg.getBoundingClientRect();
-  return rect.width > 0 ? svg.viewBox.baseVal.width / rect.width : 1;
-}
-
-/** DOM state captured before the svg becomes the full annotation surface. */
-interface SavedViewport {
-  svg: SVGSVGElement;
-  stage: HTMLDivElement;
-  viewBox: string | null;
-  width: string | null;
-  height: string | null;
-  preserveAspectRatio: string | null;
-  svgStyle: string;
-  stageStyle: string;
-  originalChildren: Node[];
-  artwork: SVGGElement;
-  artworkWidth: number;
-  artworkHeight: number;
-  /** False when the typeset box was empty (fresh/failed document). */
-  hasArtwork: boolean;
-  originalViewBox: { x: number; y: number; width: number; height: number };
-}
-
-/**
- * The drawable area around the artwork: the preview scroll container's
- * content box (its padding/border frame is excluded because max-w-full
- * constrains the svg to that box — growing into the padding would clamp and
- * rescale the whole artwork). Falls back to the host itself.
- */
-function drawableEdges(host: HTMLElement): {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-} {
-  const el = host.firstElementChild;
-  if (!(el instanceof HTMLElement)) {
-    const rect = host.getBoundingClientRect();
-    return {
-      left: rect.left,
-      right: rect.right,
-      top: rect.top,
-      bottom: rect.bottom,
-    };
-  }
-  const rect = el.getBoundingClientRect();
-  const style = window.getComputedStyle(el);
-  const padL = parseFloat(style.paddingLeft || "0");
-  const padR = parseFloat(style.paddingRight || "0");
-  const padT = parseFloat(style.paddingTop || "0");
-  const padB = parseFloat(style.paddingBottom || "0");
-  const borL = parseFloat(style.borderLeftWidth || "0");
-  const borR = parseFloat(style.borderRightWidth || "0");
-  const borT = parseFloat(style.borderTopWidth || "0");
-  const borB = parseFloat(style.borderBottomWidth || "0");
-  return {
-    left: rect.left + padL + borL,
-    right: rect.right - padR - borR,
-    top: rect.top + padT + borT,
-    bottom: rect.bottom - padB - borB,
-  };
-}
-
-/** Current CSS zoom applied to the stage, with a safe fallback. */
-function stageZoom(stage: HTMLElement): number {
-  const value = Number.parseFloat(window.getComputedStyle(stage).zoom);
-  return Number.isFinite(value) && value > 0 ? value : 1;
-}
-
-/**
- * Update the full-stage viewport and the transform that keeps the original
- * TikZ artwork centered at its original visual size.
- */
-function updateAnnotationViewport(saved: SavedViewport, host: HTMLElement) {
-  const { svg, stage, originalViewBox, artwork } = saved;
-  const zoom = stageZoom(stage);
-  const edge = drawableEdges(host);
-  const availableWidth = Math.max(1, (edge.right - edge.left) / zoom);
-  const availableHeight = Math.max(1, (edge.bottom - edge.top) / zoom);
-  const stageWidth = Math.max(availableWidth, saved.artworkWidth);
-  const stageHeight = Math.max(availableHeight, saved.artworkHeight);
-
-  stage.style.width = `${stageWidth}px`;
-  stage.style.height = `${stageHeight}px`;
-  svg.setAttribute("width", "100%");
-  svg.setAttribute("height", "100%");
-  svg.setAttribute("viewBox", `0 0 ${fx(stageWidth)} ${fx(stageHeight)}`);
-  svg.setAttribute("preserveAspectRatio", "none");
-  svg.style.width = "100%";
-  svg.style.height = "100%";
-  svg.style.maxWidth = "none";
-  svg.style.maxHeight = "none";
-  if (
-    !saved.hasArtwork ||
-    originalViewBox.width <= 0 ||
-    originalViewBox.height <= 0
-  ) {
-    // Nothing typeset: leave the (empty) artwork group untransformed rather
-    // than writing a NaN scale from the 0/0 box mapping.
-    artwork.removeAttribute("transform");
-    return;
-  }
-  const scaleX = saved.artworkWidth / originalViewBox.width;
-  const scaleY = saved.artworkHeight / originalViewBox.height;
-  const offsetX = (stageWidth - saved.artworkWidth) / 2;
-  const offsetY = (stageHeight - saved.artworkHeight) / 2;
-  artwork.setAttribute(
-    "transform",
-    `translate(${fx(offsetX - originalViewBox.x * scaleX)} ${fx(offsetY - originalViewBox.y * scaleY)}) scale(${fx(scaleX)} ${fx(scaleY)})`,
-  );
-}
-
-/**
- * Turn the generated root svg into a full-stage annotation surface. The
- * original rendered children are placed in a transformed artwork group, so
- * the generated TikZ coordinate system remains intact while the root viewBox
- * becomes panel-sized. A degenerate 0×0 svg (empty TikZ output for a fresh
- * document) is not an error: it becomes an empty canvas and the surface
- * grows to the whole container.
- */
-function createAnnotationViewport(
-  svg: SVGSVGElement,
-  host: HTMLElement,
-  stage: HTMLDivElement,
-): SavedViewport {
-  const box = svg.viewBox.baseVal;
-  const svgRect = svg.getBoundingClientRect();
-  const hasArtwork =
-    box.width > 0 && box.height > 0 && svgRect.width > 0 && svgRect.height > 0;
-  const originalChildren = Array.from(svg.childNodes);
-  const artwork = document.createElementNS(SVG_NS, "g");
-  artwork.setAttribute("data-tikz-artwork", "");
-  for (const child of originalChildren) {
-    if (
-      child instanceof Element &&
-      child.getAttribute("data-annotation-layer") !== null
-    ) {
-      continue;
-    }
-    if (
-      child instanceof Element &&
-      ["defs", "style", "title", "desc", "metadata"].includes(
-        child.tagName.toLowerCase(),
-      )
-    ) {
-      continue;
-    }
-    artwork.appendChild(child);
-  }
-  svg.appendChild(artwork);
-  const saved: SavedViewport = {
-    svg,
-    stage,
-    viewBox: svg.getAttribute("viewBox"),
-    width: svg.getAttribute("width"),
-    height: svg.getAttribute("height"),
-    preserveAspectRatio: svg.getAttribute("preserveAspectRatio"),
-    svgStyle: svg.getAttribute("style") ?? "",
-    stageStyle: stage.getAttribute("style") ?? "",
-    originalChildren,
-    artwork,
-    artworkWidth: hasArtwork ? svgRect.width / stageZoom(stage) : 0,
-    artworkHeight: hasArtwork ? svgRect.height / stageZoom(stage) : 0,
-    hasArtwork,
-    originalViewBox: {
-      x: box.x,
-      y: box.y,
-      width: box.width,
-      height: box.height,
-    },
-  };
-  updateAnnotationViewport(saved, host);
-  return saved;
-}
-
-/** Restore the generated svg and stage to their original DOM state. */
-function restoreAnnotationViewport(saved: SavedViewport): void {
-  const { svg } = saved;
-  while (svg.firstChild) {
-    svg.firstChild.remove();
-  }
-  for (const child of saved.originalChildren) {
-    svg.appendChild(child);
-  }
-  if (saved.viewBox === null) {
-    svg.removeAttribute("viewBox");
-  } else {
-    svg.setAttribute("viewBox", saved.viewBox);
-  }
-  if (saved.width === null) {
-    svg.removeAttribute("width");
-  } else {
-    svg.setAttribute("width", saved.width);
-  }
-  if (saved.height === null) {
-    svg.removeAttribute("height");
-  } else {
-    svg.setAttribute("height", saved.height);
-  }
-  if (saved.preserveAspectRatio === null) {
-    svg.removeAttribute("preserveAspectRatio");
-  } else {
-    svg.setAttribute("preserveAspectRatio", saved.preserveAspectRatio);
-  }
-  svg.setAttribute("style", saved.svgStyle);
-  saved.stage.setAttribute("style", saved.stageStyle);
-}
-
 /** Quadratic smoothing through segment midpoints softens mouse jitter. */
 function strokePathD(pts: Pt[]): string {
   if (pts.length < 2) {
@@ -506,7 +241,7 @@ function strokeAttrs(color: string, width: number) {
     strokeLinejoin: "round" as const,
     fill: "none",
     // Marks are display-only; every pointer event must reach the capture
-    // rect underneath instead of dying on existing strokes.
+    // surface underneath instead of dying on existing strokes.
     pointerEvents: "none" as const,
   };
 }
@@ -571,7 +306,6 @@ function OpNode({ op }: { op: AnnotateOp }) {
 
 export function AnnotateLayer({
   mount,
-  stage,
   onFinish,
   onCancel,
 }: AnnotateLayerProps) {
@@ -580,23 +314,21 @@ export function AnnotateLayer({
   const [color, setColor] = useState<string>(ANNOTATE_COLORS[0].value);
   const [ops, setOps] = useState<AnnotateOp[]>([]);
   const [draft, setDraft] = useState<TextDraft | null>(null);
-  const [svgEl, setSvgEl] = useState<SVGSVGElement | null>(null);
-  const [layerG, setLayerG] = useState<SVGGElement | null>(null);
+  /** Overlay-size in px, so the capture surface stays aligned on resize. */
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [, bumpTick] = useReducer((count: number) => count + 1, 0);
 
+  const overlayRef = useRef<SVGSVGElement>(null);
   const liveOpRef = useRef<StrokeOp | ShapeOp | null>(null);
   const draftRef = useRef<TextDraft | null>(null);
   const opsRef = useRef<AnnotateOp[]>([]);
   const nextIdRef = useRef(1);
-  /** Original svg box attributes, captured while the artwork box is grown. */
-  const savedViewportRef = useRef<SavedViewport | null>(null);
   const toolRef = useRef(tool);
   const colorRef = useRef(color);
 
   useEffect(() => {
     toolRef.current = tool;
   }, [tool]);
-
   useEffect(() => {
     colorRef.current = color;
   }, [color]);
@@ -613,66 +345,20 @@ export function AnnotateLayer({
     setDraft(next);
   }, []);
 
-  // Track the live svg node across recompiles; recreate the annotation group
-  // on whichever node currently holds the artwork.
+  // Track the host size so the capture surface always covers it.
   useEffect(() => {
-    const resolve = () => {
-      setSvgEl(mount.querySelector<SVGSVGElement>("svg"));
+    const read = () => {
+      const rect = mount.getBoundingClientRect();
+      setSize({ width: rect.width, height: rect.height });
     };
-    resolve();
-    const observer = new MutationObserver(resolve);
-    observer.observe(mount, { childList: true, subtree: true });
-    return () => {
-      observer.disconnect();
-    };
-  }, [mount]);
-
-  useEffect(() => {
-    if (!svgEl) {
-      setLayerG(null);
+    read();
+    if (typeof ResizeObserver === "undefined") {
       return;
     }
-    const g = document.createElementNS(SVG_NS, "g");
-    g.setAttribute("data-annotation-layer", "");
-    svgEl.appendChild(g);
-    setLayerG(g);
-    return () => {
-      g.remove();
-      setLayerG(null);
-    };
-  }, [svgEl]);
-
-  // Make the root svg the full annotation surface and keep the generated
-  // artwork in a transformed child group. Resize changes only this temporary
-  // annotation viewport; the generated svg is restored when it is removed.
-  useEffect(() => {
-    if (!svgEl || !stage) {
-      return;
-    }
-    const saved = createAnnotationViewport(svgEl, mount, stage);
-    savedViewportRef.current = saved;
-    bumpTick();
-    const resizeTarget = mount.firstElementChild;
-    const observer = new ResizeObserver(() => {
-      if (saved) {
-        updateAnnotationViewport(saved, mount);
-        bumpTick();
-      }
-    });
+    const observer = new ResizeObserver(read);
     observer.observe(mount);
-    if (resizeTarget instanceof HTMLElement) {
-      observer.observe(resizeTarget);
-    }
-    return () => {
-      observer.disconnect();
-      if (saved?.svg.isConnected) {
-        restoreAnnotationViewport(saved);
-      }
-      if (savedViewportRef.current === saved) {
-        savedViewportRef.current = null;
-      }
-    };
-  }, [svgEl, mount, stage]);
+    return () => observer.disconnect();
+  }, [mount]);
 
   const commitDraft = useCallback(() => {
     const pending = draftRef.current;
@@ -691,8 +377,8 @@ export function AnnotateLayer({
         kind: "text",
         color: colorRef.current,
         size: pending.size,
-        x: pending.ux,
-        y: pending.uy,
+        x: pending.x,
+        y: pending.y,
         text,
       },
     ]);
@@ -716,20 +402,19 @@ export function AnnotateLayer({
     };
   }, [applyDraft, onCancel]);
 
+  const pointFromEvent = (clientX: number, clientY: number): Pt => {
+    const rect = mount.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
   const handlePointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
     if (event.pointerType === "mouse" && event.button !== 0) {
-      return;
-    }
-    if (!svgEl) {
       return;
     }
     // Drawing surface: suppress default focus/drag behavior so opening the
     // text editor isn't undone by the browser moving focus right back out.
     event.preventDefault();
-    const point = toUserPoint(svgEl, event.clientX, event.clientY);
-    if (!point) {
-      return;
-    }
+    const point = pointFromEvent(event.clientX, event.clientY);
     const active = toolRef.current;
     if (active === "pen") {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -737,7 +422,7 @@ export function AnnotateLayer({
         id: nextIdRef.current++,
         kind: "stroke",
         color: colorRef.current,
-        width: strokeWidthFor(svgEl),
+        width: STROKE_WIDTH,
         points: [point],
       };
       bumpTick();
@@ -747,17 +432,11 @@ export function AnnotateLayer({
       // Claim the open editor before spawning the next one, so the old
       // input's blur can never commit or cancel the new draft.
       commitDraft();
-      const hostRect = mount.getBoundingClientRect();
-      const svgRect = svgEl.getBoundingClientRect();
-      const unitSize = fontSizeFor(svgEl);
-      const scale = svgRect.width / svgEl.viewBox.baseVal.width;
       applyDraft({
-        ux: point.x,
-        uy: point.y,
-        x: event.clientX - hostRect.left,
-        y: event.clientY - hostRect.top,
-        size: unitSize,
-        fontPx: Math.max(10, unitSize * scale),
+        x: point.x,
+        y: point.y,
+        size: FONT_SIZE,
+        fontPx: FONT_SIZE,
         value: "",
       });
       return;
@@ -768,7 +447,7 @@ export function AnnotateLayer({
       id: nextIdRef.current++,
       kind: active,
       color: colorRef.current,
-      width: strokeWidthFor(svgEl),
+      width: STROKE_WIDTH,
       x1: point.x,
       y1: point.y,
       x2: point.x,
@@ -779,13 +458,10 @@ export function AnnotateLayer({
 
   const handlePointerMove = (event: ReactPointerEvent<SVGRectElement>) => {
     const live = liveOpRef.current;
-    if (!live || !svgEl) {
+    if (!live) {
       return;
     }
-    const point = toUserPoint(svgEl, event.clientX, event.clientY);
-    if (!point) {
-      return;
-    }
+    const point = pointFromEvent(event.clientX, event.clientY);
     if (live.kind === "stroke") {
       live.points.push(point);
     } else {
@@ -797,22 +473,21 @@ export function AnnotateLayer({
 
   const handlePointerUp = () => {
     const live = liveOpRef.current;
-    if (!live || !svgEl) {
+    if (!live) {
       return;
     }
     liveOpRef.current = null;
-    const minUnits = MIN_SHAPE_PX * unitsPerScreenPx(svgEl);
     if (live.kind === "rect" || live.kind === "ellipse") {
       if (
-        Math.abs(live.x2 - live.x1) < minUnits ||
-        Math.abs(live.y2 - live.y1) < minUnits
+        Math.abs(live.x2 - live.x1) < MIN_SHAPE_PX ||
+        Math.abs(live.y2 - live.y1) < MIN_SHAPE_PX
       ) {
         bumpTick();
         return;
       }
     } else if (
       live.kind === "arrow" &&
-      Math.hypot(live.x2 - live.x1, live.y2 - live.y1) < minUnits
+      Math.hypot(live.x2 - live.x1, live.y2 - live.y1) < MIN_SHAPE_PX
     ) {
       bumpTick();
       return;
@@ -833,40 +508,41 @@ export function AnnotateLayer({
     "rounded-full bg-primary/15 p-1.5 text-primary transition duration-150 active:scale-[0.95]";
   const divider = <div className="mx-0.5 h-5 w-px bg-border/70" />;
 
-  const viewBox = svgEl?.viewBox.baseVal;
-
   return (
     <>
-      {layerG &&
-        viewBox &&
-        createPortal(
-          <>
-            {/* Invisible capture surface covering the whole viewBox: it keeps
-              hit-testing aligned with the artwork box at any zoom without
-              tracking layout rects from HTML land. */}
-            <rect
-              x={viewBox.x}
-              y={viewBox.y}
-              width={viewBox.width}
-              height={viewBox.height}
-              fill="none"
-              pointerEvents="all"
-              style={{
-                touchAction: "none",
-                cursor: tool === "text" ? "text" : "crosshair",
-              }}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
-            />
-            {ops.map((op) => (
-              <OpNode key={op.id} op={op} />
-            ))}
-            {liveOpRef.current && <OpNode op={liveOpRef.current} />}
-          </>,
-          layerG,
-        )}
+      {createPortal(
+        <svg
+          ref={overlayRef}
+          aria-hidden="true"
+          width={size.width}
+          height={size.height}
+          viewBox={`0 0 ${fx(size.width)} ${fx(size.height)}`}
+          className="absolute inset-0 z-20"
+          style={{ overflow: "visible" }}
+        >
+          <rect
+            x={0}
+            y={0}
+            width={size.width}
+            height={size.height}
+            fill="none"
+            pointerEvents="all"
+            style={{
+              touchAction: "none",
+              cursor: tool === "text" ? "text" : "crosshair",
+            }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
+          {ops.map((op) => (
+            <OpNode key={op.id} op={op} />
+          ))}
+          {liveOpRef.current && <OpNode op={liveOpRef.current} />}
+        </svg>,
+        mount,
+      )}
       {draft &&
         createPortal(
           <input
@@ -905,11 +581,11 @@ export function AnnotateLayer({
               fontSize: `${draft.fontPx}px`,
               minWidth: "5rem",
             }}
-            className="absolute z-20 rounded-md border border-border/60 bg-background/90 px-1.5 py-0.5 outline-none focus-visible:border-ring"
+            className="absolute z-30 rounded-md border border-border/60 bg-background/90 px-1.5 py-0.5 outline-none focus-visible:border-ring"
           />,
           mount,
         )}
-      <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-3">
+      <div className="pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center px-3">
         <div className="glass-control pointer-events-auto flex items-center gap-0.5 rounded-full bg-clip-padding p-1.5 shadow-lg">
           <button
             type="button"
@@ -1011,7 +687,10 @@ export function AnnotateLayer({
           </button>
           <button
             type="button"
-            onClick={() => onFinish(opsRef.current.length > 0)}
+            onClick={() => {
+              commitDraft();
+              onFinish(opsRef.current.length > 0, overlayRef.current);
+            }}
             className="ml-0.5 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white transition duration-150 hover:brightness-[1.06] active:brightness-95"
           >
             <CheckIcon className="size-3.5" />

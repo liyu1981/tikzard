@@ -95,17 +95,21 @@ export function measureSvgNaturalSize(
  * pixelWidth × pixelHeight on an opaque white background (matching the
  * light-scheme preview canvas).
  */
-export async function renderSvgToCanvas(
+/**
+ * Clone an svg with all referenced fonts inlined and decode it into an
+ * <img> at the given pixel size. A standalone SVG loaded through <img> cannot
+ * fetch external resources, so fonts must be embedded or text is lost.
+ */
+async function svgToImage(
   svg: SVGSVGElement,
-  pixelWidth: number,
-  pixelHeight: number,
-): Promise<HTMLCanvasElement> {
-  const width = Math.max(1, Math.round(pixelWidth));
-  const height = Math.max(1, Math.round(pixelHeight));
-
+  width: number,
+  height: number,
+): Promise<HTMLImageElement> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("width", String(width));
   clone.setAttribute("height", String(height));
+  clone.style.width = `${width}px`;
+  clone.style.height = `${height}px`;
 
   const fontCss = (
     await Promise.all(collectFontFamilies(clone).map(loadFontFaceCss))
@@ -129,27 +133,91 @@ export async function renderSvgToCanvas(
       img.addEventListener(
         "error",
         () => reject(new Error("svg decode failed")),
-        {
-          once: true,
-        },
+        { once: true },
       );
       img.src = blobUrl;
     });
-
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      throw new Error("canvas 2d context unavailable");
-    }
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(img, 0, 0, width, height);
-    return canvas;
+    return img;
   } finally {
     URL.revokeObjectURL(blobUrl);
   }
+}
+
+/**
+ * Draw the svg into an offscreen canvas at device resolution
+ * pixelWidth × pixelHeight on an opaque white background (matching the
+ * light-scheme preview canvas).
+ */
+export async function renderSvgToCanvas(
+  svg: SVGSVGElement,
+  pixelWidth: number,
+  pixelHeight: number,
+): Promise<HTMLCanvasElement> {
+  const width = Math.max(1, Math.round(pixelWidth));
+  const height = Math.max(1, Math.round(pixelHeight));
+  const img = await svgToImage(svg, width, height);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("canvas 2d context unavailable");
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(img, 0, 0, width, height);
+  return canvas;
+}
+
+/**
+ * Composite the rendered drawing with the annotation overlay into one PNG for
+ * the assistant. The drawing keeps its on-screen position/size inside the
+ * preview host; the overlay (its own transparent layer) is drawn on top at
+ * the host's full size, so annotations line up exactly.
+ */
+export async function compositeAnnotationBlob(
+  drawingSvg: SVGSVGElement,
+  overlaySvg: SVGSVGElement | null,
+  host: HTMLElement,
+  maxPx: number = ANNOTATION_MAX_PX,
+): Promise<Blob> {
+  const hostRect = host.getBoundingClientRect();
+  const scale = Math.min(1, maxPx / Math.max(hostRect.width, hostRect.height));
+  const width = Math.max(1, Math.round(hostRect.width * scale));
+  const height = Math.max(1, Math.round(hostRect.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("canvas 2d context unavailable");
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  const drawingRect = drawingSvg.getBoundingClientRect();
+  if (drawingRect.width > 0 && drawingRect.height > 0) {
+    const drawingImg = await svgToImage(
+      drawingSvg,
+      Math.max(1, Math.round(drawingRect.width)),
+      Math.max(1, Math.round(drawingRect.height)),
+    );
+    ctx.drawImage(
+      drawingImg,
+      (drawingRect.left - hostRect.left) * scale,
+      (drawingRect.top - hostRect.top) * scale,
+      drawingRect.width * scale,
+      drawingRect.height * scale,
+    );
+  }
+
+  if (overlaySvg !== null) {
+    const overlayImg = await svgToImage(overlaySvg, width, height);
+    ctx.drawImage(overlayImg, 0, 0, width, height);
+  }
+
+  return canvasToPngBlob(canvas);
 }
 
 export function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -179,21 +247,6 @@ export async function svgToPngBlob(
 
 /** Longest side allowed for an annotated snapshot attached to the assistant. */
 export const ANNOTATION_MAX_PX = 1568;
-
-/**
- * Rasterize the live preview <svg> — including its <g data-annotation-layer>
- * marks, which live inside the artwork's own coordinate system — into one
- * downscaled PNG blob for the assistant.
- */
-export async function annotatedSnapshotBlob(
-  svg: SVGSVGElement,
-  zoom: number,
-  maxPx: number = ANNOTATION_MAX_PX,
-): Promise<Blob> {
-  const natural = measureSvgNaturalSize(svg, zoom);
-  const scale = Math.min(1, maxPx / Math.max(natural.width, natural.height));
-  return svgToPngBlob(svg, natural, scale);
-}
 
 /** Trigger a browser download for a blob built in-memory. */
 export function downloadBlob(blob: Blob, filename: string): void {

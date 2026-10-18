@@ -7,7 +7,7 @@ import type { Status } from "@/components/workbench-types";
 import { blobToImageContent } from "@/lib/agent/images";
 import { pushCompileLog } from "@/lib/compile-logs";
 import {
-  annotatedSnapshotBlob,
+  compositeAnnotationBlob,
   downloadBlob,
   measureSvgNaturalSize,
   renderSvgToCanvas,
@@ -21,6 +21,8 @@ const EXPORT_SCALE = 3;
 interface Props {
   docTitle: string;
   status: Status;
+  /** Annotation rewrites the svg viewport; freeze fit/grid while it is active. */
+  annotating: boolean;
   stageRef: React.RefObject<HTMLDivElement | null>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   setLeftTab: (tab: "assistant" | "instruction") => void;
@@ -35,6 +37,7 @@ interface Props {
 export function useWorkbenchPreview({
   docTitle,
   status,
+  annotating,
   stageRef,
   canvasRef,
   setLeftTab,
@@ -42,13 +45,27 @@ export function useWorkbenchPreview({
   t,
 }: Props) {
   const [zoom, setZoom] = useState(1);
+  const [fitScale, setFitScale] = useState(1);
   const [exporting, setExporting] = useState(false);
   const zoomRef = useRef(zoom);
   const tRef = useRef(t);
+  const annotatingRef = useRef(annotating);
+
+  useEffect(() => {
+    annotatingRef.current = annotating;
+  }, [annotating]);
+
+  // Actual on-screen scale: the fit-to-container base times the user zoom, so
+  // zoom = 1 always shows the drawing as large as the canvas allows.
+  const displayScale = fitScale * zoom;
+  const displayScaleRef = useRef(displayScale);
 
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+  useEffect(() => {
+    displayScaleRef.current = displayScale;
+  }, [displayScale]);
   useEffect(() => {
     tRef.current = t;
   }, [t]);
@@ -58,25 +75,111 @@ export function useWorkbenchPreview({
     [canvasRef],
   );
 
-  const fitView = useCallback(() => {
+  /**
+   * Base scale that makes the current drawing fill the canvas (contain), used
+   * as the zoom = 1 size. Recomputed whenever a new svg lands or the canvas
+   * resizes, so the drawing always opens as large as it can fit.
+   */
+  const computeFitScale = useCallback(() => {
+    if (annotatingRef.current) {
+      return;
+    }
     const canvas = canvasRef.current;
     const svg = canvas?.querySelector("svg");
-    if (!canvas || !svg) return;
+    if (!canvas || !svg) {
+      return;
+    }
+    // Ignore partial/loader svgs that have no laid-out viewBox yet.
+    const box = svg.viewBox.baseVal;
+    if (box.width <= 0 || box.height <= 0) {
+      return;
+    }
     const style = window.getComputedStyle(canvas);
     const availW =
       canvas.clientWidth -
-      Number.parseFloat(style.paddingLeft) -
-      Number.parseFloat(style.paddingRight);
+      Number.parseFloat(style.paddingLeft || "0") -
+      Number.parseFloat(style.paddingRight || "0");
     const availH =
       canvas.clientHeight -
-      Number.parseFloat(style.paddingTop) -
-      Number.parseFloat(style.paddingBottom);
-    const rect = svg.getBoundingClientRect();
-    const natW = Math.max(1, rect.width / zoomRef.current);
-    const natH = Math.max(1, rect.height / zoomRef.current);
-    const scale = Math.min(availW / natW, availH / natH, 1);
-    setZoom(Math.max(0.25, Math.round(scale * 100) / 100));
+      Number.parseFloat(style.paddingTop || "0") -
+      Number.parseFloat(style.paddingBottom || "0");
+    if (availW <= 0 || availH <= 0) {
+      return;
+    }
+    const natural = measureSvgNaturalSize(svg, displayScaleRef.current);
+    if (natural.width <= 0 || natural.height <= 0) {
+      return;
+    }
+    // Leave a hair of slack so sub-pixel rounding never spawns a scrollbar.
+    const scale = Math.min(
+      Math.max(0, availW - 1) / natural.width,
+      Math.max(0, availH - 1) / natural.height,
+    );
+    if (Number.isFinite(scale) && scale > 0) {
+      setFitScale(scale);
+    }
   }, [canvasRef]);
+
+  // Re-fit when a render completes and whenever the canvas changes size.
+  useEffect(() => {
+    if (status !== "done") {
+      return;
+    }
+    const raf = requestAnimationFrame(computeFitScale);
+    return () => cancelAnimationFrame(raf);
+  }, [status, computeFitScale]);
+
+  // Annotation rewrites the svg viewport; re-fit once it ends.
+  useEffect(() => {
+    if (annotating) {
+      return;
+    }
+    const raf = requestAnimationFrame(computeFitScale);
+    return () => cancelAnimationFrame(raf);
+  }, [annotating, computeFitScale]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      requestAnimationFrame(computeFitScale);
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [canvasRef, computeFitScale]);
+
+  // TikZJax inserts the svg and then sets its width/height attributes, and it
+  // may replace the node during a render, so re-fit whenever the subtree or
+  // those attributes change (and not on our own style.zoom writes).
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof MutationObserver === "undefined") {
+      return;
+    }
+    let raf = 0;
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(computeFitScale);
+    };
+    const observer = new MutationObserver(schedule);
+    observer.observe(canvas, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["width", "height"],
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [canvasRef, computeFitScale]);
+
+  const fitView = useCallback(() => {
+    setZoom(1);
+    requestAnimationFrame(computeFitScale);
+  }, [computeFitScale]);
 
   const ensurePlaceholderSvg = useCallback(() => {
     const stage = stageRef.current;
@@ -104,10 +207,11 @@ export function useWorkbenchPreview({
   }, [canvasRef, getPreviewSvg, stageRef]);
 
   const handleAnnotateFinish = useCallback(
-    (hasContent: boolean) => {
+    (hasContent: boolean, overlay: SVGSVGElement | null) => {
       const svg = getPreviewSvg();
-      if (!hasContent || !svg) return;
-      void annotatedSnapshotBlob(svg, zoomRef.current)
+      const host = canvasRef.current?.parentElement ?? null;
+      if (!hasContent || !svg || host === null) return;
+      void compositeAnnotationBlob(svg, overlay, host)
         .then(blobToImageContent)
         .then((content) => {
           setPendingAnnotation({
@@ -122,7 +226,7 @@ export function useWorkbenchPreview({
           pushCompileLog("error", tRef.current("workbench.exportFailed")),
         );
     },
-    [getPreviewSvg, setLeftTab, setPendingAnnotation],
+    [canvasRef, getPreviewSvg, setLeftTab, setPendingAnnotation],
   );
 
   const runExport = useCallback(
@@ -150,10 +254,14 @@ export function useWorkbenchPreview({
       runExport(async (svg) => {
         if (!navigator.clipboard?.write)
           throw new Error("clipboard unavailable");
-        const natural = measureSvgNaturalSize(svg, zoomRef.current);
+        const natural = measureSvgNaturalSize(svg, displayScaleRef.current);
         await navigator.clipboard.write([
           new ClipboardItem({
-            "image/png": await svgToPngBlob(svg, natural, zoomRef.current),
+            "image/png": await svgToPngBlob(
+              svg,
+              natural,
+              displayScaleRef.current,
+            ),
           }),
         ]);
         return tRef.current("workbench.copyDetail", {
@@ -166,7 +274,7 @@ export function useWorkbenchPreview({
   const handleExportPng = useCallback(
     () =>
       runExport(async (svg) => {
-        const natural = measureSvgNaturalSize(svg, zoomRef.current);
+        const natural = measureSvgNaturalSize(svg, displayScaleRef.current);
         downloadBlob(
           await svgToPngBlob(svg, natural, EXPORT_SCALE),
           `${toFileSlug(docTitle)}.png`,
@@ -179,7 +287,7 @@ export function useWorkbenchPreview({
   const handleExportPdf = useCallback(
     () =>
       runExport(async (svg) => {
-        const natural = measureSvgNaturalSize(svg, zoomRef.current);
+        const natural = measureSvgNaturalSize(svg, displayScaleRef.current);
         const canvas = await renderSvgToCanvas(
           svg,
           natural.width * EXPORT_SCALE,
@@ -196,6 +304,7 @@ export function useWorkbenchPreview({
 
   return {
     zoom,
+    displayScale,
     setZoom,
     zoomRef,
     exporting,

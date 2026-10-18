@@ -81,6 +81,19 @@ body {
   transition: background-color 250ms ease-out;
 }
 
+/* TikZJax injects its own stylesheet with `.tikzjax-wrapper { margin: 0.75em 0;
+   line-height: ... }` after ours, so it wins on equal specificity. The vertical
+   margin + baseline space overflow the preview box and show a scrollbar at
+   zoom = 1; double the class to outrank the injected rule. */
+.tikzjax-wrapper.tikzjax-wrapper {
+  display: block;
+  margin: 0;
+  line-height: 0;
+}
+.tikzjax-wrapper.tikzjax-wrapper > svg {
+  display: block;
+}
+
 ::selection {
   background: color-mix(in oklch, var(--primary) 35%, transparent);
 }

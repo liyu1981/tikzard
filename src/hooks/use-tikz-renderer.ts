@@ -9,7 +9,7 @@ import {
   pushCompileLog,
   setRenderFailureListener,
 } from "@/lib/compile-logs";
-import { withHelperGrid } from "@/lib/helper-grid";
+import { withGridCalibration } from "@/lib/helper-grid";
 import { ensureTikzJax } from "@/lib/tikzjax";
 
 const AUTO_RENDER_DELAY_MS = 600;
@@ -87,7 +87,7 @@ export function useTikzRenderer({
       if (libraries.length > 0) {
         el.setAttribute("data-tikz-libraries", libraries.join(","));
       }
-      el.textContent = helperGrid ? withHelperGrid(source) : source;
+      el.textContent = helperGrid ? withGridCalibration(source) : source;
       host.appendChild(el);
     },
     [stageRef, packages, libraries, helperGrid],

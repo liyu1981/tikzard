@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { PencilIcon } from "@/components/agent/icons";
 import { AnnotateLayer } from "@/components/annotate-overlay";
 import { CompileLogs } from "@/components/compile-logs";
+import { HelperGridLayer } from "@/components/helper-grid-layer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +29,7 @@ import {
   type Status,
   TAB_PILL,
 } from "@/components/workbench-types";
+import type { HelperGridMapping } from "@/lib/helper-grid";
 
 interface Props {
   rightTab: RightTab;
@@ -35,9 +37,11 @@ interface Props {
   doneInfo: { at: number; ms: number } | null;
   nowTick: number;
   zoom: number;
+  displayScale: number;
   exporting: boolean;
   annotating: boolean;
   helperGrid: boolean;
+  grid: HelperGridMapping | null;
   previewHostEl: HTMLDivElement | null;
   stageRef: React.RefObject<HTMLDivElement | null>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
@@ -49,7 +53,10 @@ interface Props {
   onExportCopy: () => void;
   onExportPng: () => void;
   onExportPdf: () => void;
-  onAnnotateFinish: (hasContent: boolean) => void;
+  onAnnotateFinish: (
+    hasContent: boolean,
+    overlay: SVGSVGElement | null,
+  ) => void;
   onAnnotateCancel: () => void;
   onPreviewHostChange: (element: HTMLDivElement | null) => void;
 }
@@ -60,9 +67,11 @@ export function WorkbenchPreviewPanel({
   doneInfo,
   nowTick,
   zoom,
+  displayScale,
   exporting,
   annotating,
   helperGrid,
+  grid,
   previewHostEl,
   stageRef,
   canvasRef,
@@ -249,25 +258,21 @@ export function WorkbenchPreviewPanel({
             : "hidden"
         }
       >
-        <div ref={onPreviewHostChange} className="relative min-h-0 flex-1">
+        <div
+          ref={onPreviewHostChange}
+          className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-black/10 bg-white shadow-inner"
+        >
+          {helperGrid && grid !== null && <HelperGridLayer mapping={grid} />}
           <div
             ref={canvasRef}
-            className="flex h-full items-center justify-center overflow-auto rounded-lg border border-black/10 bg-white p-4 shadow-inner"
+            data-preview-canvas=""
+            className="relative z-10 flex h-full items-center justify-center overflow-auto p-4"
           >
-            <div
-              ref={stageRef}
-              style={{ zoom }}
-              className={
-                zoom > 1
-                  ? "[&_svg]:h-auto"
-                  : "[&_svg]:h-auto [&_svg]:max-w-full"
-              }
-            />
+            <div ref={stageRef} style={{ zoom: displayScale }} />
           </div>
           {annotating && previewHostEl !== null && (
             <AnnotateLayer
               mount={previewHostEl}
-              stage={stageRef.current}
               onFinish={onAnnotateFinish}
               onCancel={onAnnotateCancel}
             />
