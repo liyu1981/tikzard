@@ -9,7 +9,7 @@
   },
   "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "oj dev",
     "dev:serve": "bash scripts/dev-serve.sh",
     "dev:stop": "bash scripts/dev-stop.sh",
     "build": "bash scripts/copy-tikzjax.sh && tsc --noEmit && vite build",

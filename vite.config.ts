@@ -114,7 +114,8 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 3111,
-      host: true,
+      host: "0.0.0.0",
+      allowedHosts: true,
       ...(https === undefined ? {} : { https }),
     },
     preview: {
