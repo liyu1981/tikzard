@@ -23,8 +23,14 @@ import {
   type ReAgentTranslate,
   useReAgent,
 } from "@liyu1981/reagent";
-import { useAtom } from "jotai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAtom, useSetAtom } from "jotai";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { ensureAgentState } from "@/lib/agent/bootstrap";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
@@ -34,6 +40,7 @@ import { pushCompileLog } from "@/lib/compile-logs";
 import { cn } from "@/lib/utils";
 import { hasWebMcp, registerWebMcpTools } from "@/lib/webmcp";
 import { pendingAnnotationAtom } from "@/lib/workbench-state";
+import { ImageLightbox, imageLightboxAtom } from "./image-lightbox";
 import { MarkdownView } from "./markdown";
 
 /** Namespace for all ReAgent-persisted state (keys, config, conversations). */
@@ -100,9 +107,26 @@ function AnnotationStager() {
  */
 function TikzAgentChrome({ className }: { className?: string }) {
   const { view } = useReAgent();
+  const setLightbox = useSetAtom(imageLightboxAtom);
+
+  // Attachments and message images are plain <img>; open any of them in the
+  // lightbox via event delegation so we don't have to re-render ReAgent's UI.
+  const openImage = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.tagName !== "IMG") {
+      return;
+    }
+    const img = target as HTMLImageElement;
+    const src = img.currentSrc || img.src;
+    if (src !== "") {
+      setLightbox({ src, alt: img.alt });
+    }
+  };
+
   return (
     <ReAgentRoot
       data-surface="glass"
+      onClick={openImage}
       className={cn(
         "glass-control-opaque flex h-full min-h-0 flex-col overflow-hidden rounded-xl",
         className,
@@ -141,6 +165,7 @@ function TikzAgentChrome({ className }: { className?: string }) {
         </>
       )}
       <AnnotationStager />
+      <ImageLightbox />
     </ReAgentRoot>
   );
 }
