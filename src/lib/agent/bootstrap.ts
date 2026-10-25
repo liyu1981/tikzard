@@ -95,7 +95,8 @@ function migrateLegacyState(prefix: string): void {
 
 /** Seed the bundled drawing guides into ReAgent's skill registry once. */
 function seedBundledSkills(prefix: string): void {
-  if (localStorage.getItem(SEED_KEY) === String(SEED_VERSION)) {
+  const seedKey = `${SEED_KEY}.${prefix}`;
+  if (localStorage.getItem(seedKey) === String(SEED_VERSION)) {
     return;
   }
   const config = getAgentConfig(prefix);
@@ -106,12 +107,53 @@ function seedBundledSkills(prefix: string): void {
   if (additions.length > 0) {
     updateAgentConfig({ skills: [...config.skills, ...additions] }, prefix);
   }
-  localStorage.setItem(SEED_KEY, String(SEED_VERSION));
+  localStorage.setItem(seedKey, String(SEED_VERSION));
+}
+
+const BASE_STORAGE_PREFIX = "tikzard";
+
+/** Copy the base (global) agent config/credentials into a document-specific
+ *  namespace the first time it is used, so per-document agent sessions still
+ *  share the user's verified models and API keys. */
+function cloneBaseConfig(prefix: string): void {
+  if (prefix === BASE_STORAGE_PREFIX) {
+    return;
+  }
+  // Credentials live in their own localStorage keys.
+  const baseCredPrefix = `${BASE_STORAGE_PREFIX}.credential.`;
+  const docCredPrefix = `${prefix}.credential.`;
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(baseCredPrefix)) {
+      const providerId = key.slice(baseCredPrefix.length);
+      const nextKey = `${docCredPrefix}${providerId}`;
+      const value = localStorage.getItem(key);
+      if (value !== null && localStorage.getItem(nextKey) === null) {
+        localStorage.setItem(nextKey, value);
+      }
+    }
+  }
+  const baseConfig = getAgentConfig(BASE_STORAGE_PREFIX);
+  const docConfig = getAgentConfig(prefix);
+  if (docConfig.model === null && baseConfig.model !== null) {
+    updateAgentConfig(
+      {
+        providers: baseConfig.providers,
+        model: baseConfig.model,
+        thinkingLevel: baseConfig.thinkingLevel,
+        systemPrompt: baseConfig.systemPrompt,
+        toolsDisabled: baseConfig.toolsDisabled,
+        skills: baseConfig.skills,
+      },
+      prefix,
+    );
+  }
 }
 
 export function ensureAgentState(prefix: string): void {
   try {
     migrateLegacyState(prefix);
+    cloneBaseConfig(prefix);
     seedBundledSkills(prefix);
   } catch {
     // Storage unavailable — the assistant runs with its defaults.

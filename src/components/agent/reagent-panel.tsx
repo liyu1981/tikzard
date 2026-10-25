@@ -23,7 +23,7 @@ import {
   type ReAgentTranslate,
   useReAgent,
 } from "@liyu1981/reagent";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   type MouseEvent,
   useCallback,
@@ -39,7 +39,7 @@ import { buildTikzToolDescriptors, buildTikzTools } from "@/lib/agent/tools";
 import { pushCompileLog } from "@/lib/compile-logs";
 import { cn } from "@/lib/utils";
 import { hasWebMcp, registerWebMcpTools } from "@/lib/webmcp";
-import { pendingAnnotationAtom } from "@/lib/workbench-state";
+import { currentDocIdAtom, pendingAnnotationAtom } from "@/lib/workbench-state";
 import { ImageLightbox, imageLightboxAtom } from "./image-lightbox";
 import { MarkdownView } from "./markdown";
 
@@ -181,6 +181,11 @@ export function TikzAgentPanel({
 }: TikzAgentPanelProps) {
   const { i18n } = useTranslation();
   const theme = useResolvedTheme();
+  const currentDocId = useAtomValue(currentDocIdAtom);
+  // Keep each document's agent conversations (and their logs) isolated:
+  // ReAgent persists sessions under this prefix, so a document switch must
+  // not reuse the previous document's session store.
+  const storagePrefix = `${STORAGE_PREFIX}.${currentDocId ?? "new"}`;
 
   // When WebMCP is available (native or polyfilled), the tools are exposed on
   // `document.modelContext` and ReAgent auto-discovers them; otherwise fall
@@ -210,16 +215,18 @@ export function TikzAgentPanel({
     pushCompileLog(level === "error" ? "error" : "info", message);
   }, []);
 
-  // Migrate pre-ReAgent state once and seed the bundled drawing guides.
+  // Migrate pre-ReAgent state once and seed the bundled drawing guides for
+  // this document's storage namespace.
   useEffect(() => {
-    ensureAgentState(STORAGE_PREFIX);
-  }, []);
+    ensureAgentState(storagePrefix);
+  }, [storagePrefix]);
 
   const language = i18n.language?.startsWith("zh") ? "zh-CN" : "en";
 
   return (
     <ReAgentProvider
-      storagePrefix={STORAGE_PREFIX}
+      key={currentDocId ?? "new"}
+      storagePrefix={storagePrefix}
       extraDescriptors={extraDescriptors}
       theme={theme}
       language={language}

@@ -13,13 +13,7 @@ export const EXAMPLE_CODE = String.raw`\begin{tikzpicture}
 \end{tikzpicture}`;
 
 /** Starter source used when the user creates a new document. */
-export const NEW_DOCUMENT_CODE = String.raw`% Set x unit vector to 3 cm per unit, and y unit vector to 4 cm per unit
-\begin{tikzpicture}[x=3cm, y=4cm]
-  % Draw x axis with arrow tip, labeled x
-  \draw[->, ultra thick] (-0.5,0) -- (4.5,0) node[right, font=\large] {$x$};
-
-  % Draw y axis with arrow tip, labeled y
-  \draw[->, ultra thick] (0,-0.5) -- (0,3) node[above, font=\large] {$y$};
+export const NEW_DOCUMENT_CODE = String.raw`\begin{tikzpicture}
 \end{tikzpicture}`;
 
 export type LeftTab = "instruction" | "assistant";
