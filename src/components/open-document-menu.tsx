@@ -15,6 +15,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { deleteAgentStorage } from "@/lib/agent/bootstrap";
 import {
   deleteDocument,
   listDocuments,
@@ -293,6 +294,7 @@ export function OpenDocumentMenu() {
   async function handleDelete(id: string) {
     await deleteDocument(id);
     await deleteVersions(id).catch(() => undefined);
+    await deleteAgentStorage(id).catch(() => undefined);
     setDocs((prev) => prev.filter((doc) => doc.id !== id));
     // Deleting the currently-open document also clears the last-opened
     // pointer so the next boot lands on the welcome page.

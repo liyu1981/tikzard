@@ -10,10 +10,18 @@
 import {
   type AgentConfig,
   getAgentConfig,
+  storageDatabase,
   storageKey,
   updateAgentConfig,
 } from "@liyu1981/reagent";
 import { getBundledSkillConfigs } from "./skills";
+
+const BASE_STORAGE_PREFIX = "tikzard";
+
+/** ReAgent storage namespace for a document's agent sessions/logs. */
+export function agentStoragePrefix(docId: string | null): string {
+  return `${BASE_STORAGE_PREFIX}.${docId ?? "new"}`;
+}
 
 const SEED_KEY = "tikzard.skills.seedVersion";
 /** Bump to re-offer updated bundled skill bodies after a release. */
@@ -110,8 +118,6 @@ function seedBundledSkills(prefix: string): void {
   localStorage.setItem(seedKey, String(SEED_VERSION));
 }
 
-const BASE_STORAGE_PREFIX = "tikzard";
-
 /** Copy the base (global) agent config/credentials into a document-specific
  *  namespace the first time it is used, so per-document agent sessions still
  *  share the user's verified models and API keys. */
@@ -158,4 +164,36 @@ export function ensureAgentState(prefix: string): void {
   } catch {
     // Storage unavailable — the assistant runs with its defaults.
   }
+}
+
+/** Reap a document's ReAgent state: its localStorage namespace (config,
+ *  credentials, seed flags) and its IndexedDB session/log database. */
+export async function deleteAgentStorage(docId: string): Promise<void> {
+  const prefix = agentStoragePrefix(docId);
+  const keyPrefix = `${prefix}.`;
+
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(keyPrefix)) {
+      keys.push(key);
+    }
+  }
+  for (const key of keys) {
+    localStorage.removeItem(key);
+  }
+  // The per-prefix skills seed flag lives outside the `<prefix>.` namespace.
+  localStorage.removeItem(`${SEED_KEY}.${prefix}`);
+
+  if (typeof indexedDB === "undefined") {
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(storageDatabase(prefix));
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    // A live connection can block deletion; the orphaned database is harmless
+    // and will be reaped the next time this document id is deleted.
+    request.onblocked = () => resolve();
+  });
 }

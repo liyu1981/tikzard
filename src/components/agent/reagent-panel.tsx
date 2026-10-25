@@ -32,7 +32,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { ensureAgentState } from "@/lib/agent/bootstrap";
+import { agentStoragePrefix, ensureAgentState } from "@/lib/agent/bootstrap";
 import type { EditorMutationBridge } from "@/lib/agent/editor-mutations";
 import { imageContentToFile } from "@/lib/agent/images";
 import { buildTikzToolDescriptors, buildTikzTools } from "@/lib/agent/tools";
@@ -42,9 +42,6 @@ import { hasWebMcp, registerWebMcpTools } from "@/lib/webmcp";
 import { currentDocIdAtom, pendingAnnotationAtom } from "@/lib/workbench-state";
 import { ImageLightbox, imageLightboxAtom } from "./image-lightbox";
 import { MarkdownView } from "./markdown";
-
-/** Namespace for all ReAgent-persisted state (keys, config, conversations). */
-const STORAGE_PREFIX = "tikzard";
 
 interface TikzAgentPanelProps {
   agentBridge: EditorMutationBridge;
@@ -185,7 +182,7 @@ export function TikzAgentPanel({
   // Keep each document's agent conversations (and their logs) isolated:
   // ReAgent persists sessions under this prefix, so a document switch must
   // not reuse the previous document's session store.
-  const storagePrefix = `${STORAGE_PREFIX}.${currentDocId ?? "new"}`;
+  const storagePrefix = agentStoragePrefix(currentDocId);
 
   // When WebMCP is available (native or polyfilled), the tools are exposed on
   // `document.modelContext` and ReAgent auto-discovers them; otherwise fall
